@@ -1,5 +1,18 @@
 # Journal des modifications
 
+## V0.3.0 — 26 novembre 2026
+
+- **Comptes contributeurs facultatifs** (e-mail + mot de passe) : contributions, brouillons (avec leurs
+  fichiers), favoris, réactions et pseudonyme retrouvés sur tous les appareils. À la connexion, ce qui
+  a été fait sur l'appareil est rattaché au compte. Suppression du compte depuis « Mon espace ».
+  Chaque compte ne lit que ses propres données (60 vérifications automatiques des règles d'accès).
+- **Transcription automatique gratuite** dans le navigateur (Whisper « base », Transformers.js) :
+  l'enregistrement ne quitte pas l'appareil, le texte est proposé puis corrigé par l'auteur, la
+  mention « transcription automatique corrigée par l'auteur » s'affiche.
+- **Pages légales** : politique de confidentialité, conditions d'utilisation, mentions légales
+  (identité de l'éditeur dans `src/data/legal.ts`). Liens dans le menu et au moment du consentement.
+- Tests : `tests/comptes.e2e.mjs` (deux appareils, un compte).
+
 ## V0.2.0 — 26 novembre 2026
 
 Base partagée (Supabase, offre gratuite), branchée le 26 novembre 2026 (projet tzflxdyngkrunueqrojl).

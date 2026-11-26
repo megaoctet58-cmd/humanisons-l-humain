@@ -118,3 +118,21 @@ Aucune donnée n'est perdue.
 
 Pensez à faire de temps en temps : Administration → Paramètres et données → **Exporter les données**.
 Le fichier obtenu contient tout (y compris les voix et les données privées) : gardez-le en lieu sûr.
+
+---
+
+## Mise à jour V0.3 : comptes contributeurs (à faire une fois)
+
+1. **Relancer le script de sécurité** : comme à l'étape 3, copiez
+   https://github.com/megaoctet58-cmd/humanisons-l-humain/blob/main/supabase/schema.sql
+   dans **SQL Editor** → **+ New query** → **Run** (confirmez l'avertissement s'il apparaît).
+   Rien n'est effacé : le script ajoute les tables des comptes et met à jour les règles.
+2. **Ouvrir les inscriptions** : **Authentication** → **Sign In / Providers** →
+   activez **Allow new users to sign up** → **Save**.
+   (Sans danger : un compte contributeur n'a aucun droit d'administration.)
+3. **Désactiver la confirmation par e-mail** : même page, section **Email** →
+   désactivez **Confirm email** → **Save**.
+   Pourquoi : l'envoi d'e-mails intégré à l'offre gratuite de Supabase ne fonctionne
+   que pour les membres de votre équipe Supabase. Sans ce réglage, personne d'autre ne pourrait
+   finir son inscription. On pourra brancher plus tard un service d'e-mails gratuit (par exemple
+   Brevo, 300 e-mails par jour) pour réactiver la confirmation et le « mot de passe oublié ».

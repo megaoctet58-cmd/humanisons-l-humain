@@ -7,7 +7,7 @@
  */
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { SUPABASE_ANON_KEY, SUPABASE_URL } from '../config';
-import type { Category, Post, PostStatus, PrivateInfo, Report, Settings } from '../models/types';
+import type { Category, MediaRef, Post, PostStatus, PrivateInfo, ReactionId, Report, Settings } from '../models/types';
 
 const BUCKET = 'media';
 
@@ -112,11 +112,14 @@ export interface Tracked {
   updated_at: string | null;
   message_to_author: string | null;
   withdrawal_requested: boolean;
+  email?: string | null;
+  proofs?: MediaRef[] | null;
+  created_at?: string | null;
 }
 
-/** Statut des contributions envoyées depuis cet appareil (grâce à leur jeton). */
-export async function myContributions(items: { id: string; token: string }[]): Promise<Tracked[]> {
-  if (!items.length) return [];
+/** Contributions envoyées depuis cet appareil (grâce à leur jeton) et, si connecté, celles du compte. */
+export async function myContributions(items: { id: string; token: string }[], signedIn = false): Promise<Tracked[]> {
+  if (!items.length && !signedIn) return [];
   const sb = await client();
   const { data, error } = await sb.rpc('my_contributions', { p_items: items });
   if (error) fail('Suivi des contributions', error);
@@ -233,6 +236,7 @@ export async function removeMedia(ids: string[]): Promise<void> {
 /* ------------------------------------------------------------------ */
 
 export interface AuthState {
+  userId?: string;
   email?: string;
   isAdmin: boolean;
 }
@@ -240,10 +244,78 @@ export interface AuthState {
 export async function authState(): Promise<AuthState> {
   const sb = await client();
   const { data } = await sb.auth.getSession();
-  const email = data.session?.user.email;
   if (!data.session) return { isAdmin: false };
   const { data: admin, error } = await sb.rpc('is_admin');
-  return { email, isAdmin: !error && admin === true };
+  return { userId: data.session.user.id, email: data.session.user.email, isAdmin: !error && admin === true };
+}
+
+/** Création d'un compte contributeur. Renvoie true si la personne est connectée tout de suite. */
+export async function signUp(email: string, password: string): Promise<boolean> {
+  const sb = await client();
+  const { data, error } = await sb.auth.signUp({ email: email.trim(), password });
+  if (error) {
+    if (/not allowed|disabled/i.test(error.message)) throw new Error('La création de comptes n’est pas encore ouverte.');
+    if (/already|registered|exists/i.test(error.message)) throw new Error('Un compte existe déjà avec cette adresse : connectez-vous.');
+    if (/password/i.test(error.message)) throw new Error('Mot de passe trop faible : 8 caractères au moins.');
+    if (/rate|too many/i.test(error.message)) throw new Error('Trop de tentatives. Réessayez dans quelques minutes.');
+    fail('Création du compte', error);
+  }
+  return Boolean(data.session);
+}
+
+/* ------------------------------------------------------------------ */
+/* Compte contributeur : pseudonyme, favoris, réactions, brouillons     */
+/* ------------------------------------------------------------------ */
+
+export interface UserData {
+  pseudonym?: string | null;
+  favorites: string[];
+  reactions: Record<string, ReactionId[]>;
+}
+
+export async function getUserData(): Promise<UserData | undefined> {
+  const sb = await client();
+  const { data, error } = await sb.from('user_data').select('pseudonym,favorites,reactions').maybeSingle();
+  if (error) fail('Lecture de votre compte', error);
+  return data ? { pseudonym: data.pseudonym, favorites: data.favorites ?? [], reactions: data.reactions ?? {} } : undefined;
+}
+
+export async function saveUserData(userId: string, d: Partial<UserData>): Promise<void> {
+  const sb = await client();
+  const { error } = await sb.from('user_data').upsert({ user_id: userId, ...d, updated_at: new Date().toISOString() });
+  if (error) fail('Enregistrement de votre compte', error);
+}
+
+export async function listDrafts(): Promise<Post[]> {
+  const sb = await client();
+  const { data, error } = await sb.from('drafts').select('id,data,updated_at');
+  if (error) fail('Lecture de vos brouillons', error);
+  return (data ?? []).map((r) => ({ ...(r.data as Post), id: r.id, status: 'brouillon', updatedAt: new Date(r.updated_at).toISOString(), mine: true }));
+}
+
+export async function saveDraft(userId: string, post: Post): Promise<void> {
+  const sb = await client();
+  const data = JSON.parse(JSON.stringify({ ...post, private: { ...post.private, ownerToken: undefined } }));
+  const { error } = await sb.from('drafts').upsert({ id: post.id, user_id: userId, data, updated_at: post.updatedAt });
+  if (error) fail('Synchronisation du brouillon', error);
+}
+
+export async function deleteDraft(id: string): Promise<void> {
+  const sb = await client();
+  await sb.from('drafts').delete().eq('id', id);
+}
+
+export async function claimContributions(items: { id: string; token: string }[]): Promise<void> {
+  if (!items.length) return;
+  const sb = await client();
+  await sb.rpc('claim_contributions', { p_items: items });
+}
+
+export async function deleteAccount(): Promise<void> {
+  const sb = await client();
+  const { error } = await sb.rpc('delete_my_account');
+  if (error) fail('Suppression du compte', error);
+  await sb.auth.signOut({ scope: 'local' });
 }
 
 export async function signIn(email: string, password: string): Promise<void> {

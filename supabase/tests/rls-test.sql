@@ -119,4 +119,71 @@ do $$ begin
 end $$;
 reset role; reset request.jwt.claim.sub;
 select pg_temp.check((select count(*) from public.reports) = 1, 'signalement enregistré');
+
+-- ===== Comptes contributeurs =====
+insert into auth.users (id, email) values ('33333333-3333-3333-3333-333333333333', 'alice@test.fr'), ('44444444-4444-4444-4444-444444444444', 'bob@test.fr');
+-- Alice, sans compte, envoie depuis son téléphone, puis se connecte et rattache sa contribution
+set role anon;
+select public.submit_contribution('p_alice_tel', '{"title":"Depuis le téléphone"}', '{"email":"alice@test.fr"}', 'jeton-alice-telephone-0123456789');
+do $$ begin
+  perform public.claim_contributions('[]'); raise exception 'ÉCHEC : claim anonyme';
+exception when insufficient_privilege then raise notice 'ok : rattachement impossible sans compte'; end $$;
+reset role; reset request.jwt.claim.sub;
+set role authenticated; set request.jwt.claim.sub = '33333333-3333-3333-3333-333333333333';
+select pg_temp.check(public.claim_contributions('[{"id":"p_alice_tel","token":"jeton-alice-telephone-0123456789"}]') = 1, 'Alice rattache sa contribution à son compte');
+select pg_temp.check(public.submit_contribution('p_alice_pc', '{"title":"Depuis le compte","audio":{"id":"m_alice_voix","publishVoice":false}}', '{"proofs":[{"id":"m_alice_preuve"}]}', 'autre-jeton-alice-ordinateur-0123') = 'en_attente', 'Alice connectée envoie une contribution');
+-- Brouillon synchronisé + fichiers
+insert into public.drafts (id, data) values ('d_alice', '{"title":"Brouillon","images":[{"id":"m_alice_brouillon"}],"private":{"proofs":[{"id":"m_alice_brouillon_preuve"}]}}');
+insert into public.user_data (pseudonym, favorites) values ('Alice', '["p_test1"]');
+insert into storage.objects (bucket_id, name) values ('media', 'm_alice_brouillon'), ('media', 'm_alice_brouillon_preuve'), ('media', 'm_alice_voix');
+select pg_temp.check(true, 'Alice envoie les fichiers de son brouillon et de sa contribution');
+do $$ begin
+  insert into storage.objects (bucket_id, name) values ('media', 'm_pas_a_alice'); raise exception 'ÉCHEC : fichier non déclaré accepté pour Alice';
+exception when insufficient_privilege then raise notice 'ok : fichier non déclaré refusé (compte)'; end $$;
+reset role; reset request.jwt.claim.sub;
+-- Sur un autre appareil, Alice (connectée, sans jeton) retrouve tout
+set role authenticated; set request.jwt.claim.sub = '33333333-3333-3333-3333-333333333333';
+select pg_temp.check((select count(*) from public.my_contributions('[]')) = 2, 'Alice retrouve ses 2 contributions sans jeton');
+select pg_temp.check((select count(*) from public.drafts) = 1 and (select pseudonym from public.user_data) = 'Alice', 'Alice retrouve brouillon et pseudonyme');
+select pg_temp.check((select string_agg(name, ',' order by name) from storage.objects where name like 'm_alice%') = 'm_alice_brouillon,m_alice_brouillon_preuve,m_alice_voix', 'Alice peut réécouter sa voix non publiée et ses fichiers');
+select public.request_withdrawal('p_alice_pc', '', 'Je retire');
+select pg_temp.check(true, 'Alice demande un retrait depuis son compte, sans jeton');
+reset role; reset request.jwt.claim.sub;
+-- Bob ne voit rien d'Alice
+set role authenticated; set request.jwt.claim.sub = '44444444-4444-4444-4444-444444444444';
+select pg_temp.check((select count(*) from public.my_contributions('[]')) = 0, 'Bob ne voit pas les contributions d''Alice');
+select pg_temp.check((select count(*) from public.drafts) = 0 and (select count(*) from public.user_data) = 0, 'Bob ne voit ni brouillons ni favoris d''Alice');
+select pg_temp.check((select count(*) from storage.objects where name like 'm_alice%') = 0, 'Bob ne lit aucun fichier d''Alice');
+update public.drafts set data = '{"title":"piraté"}' where id = 'd_alice';
+delete from storage.objects where name = 'm_alice_brouillon';
+do $$ begin
+  perform public.submit_contribution('p_alice_pc', '{"title":"piraté"}', '{}', 'jeton-de-bob-jeton-de-bob-0123456');
+  raise exception 'ÉCHEC : Bob modifie la contribution d''Alice';
+exception when raise_exception then if sqlerrm like 'ÉCHEC%' then raise; end if; raise notice 'ok : Bob ne peut pas modifier la contribution d''Alice'; end $$;
+do $$ begin
+  perform public.request_withdrawal('p_alice_tel', 'jeton-de-bob-jeton-de-bob-0123456', 'x'); raise exception 'ÉCHEC : retrait par Bob';
+exception when raise_exception then if sqlerrm like 'ÉCHEC%' then raise; end if; raise notice 'ok : Bob ne peut pas demander le retrait'; end $$;
+do $$ begin
+  insert into public.drafts (id, user_id, data) values ('d_bob_pirate', '33333333-3333-3333-3333-333333333333', '{}'); raise exception 'ÉCHEC : Bob écrit chez Alice';
+exception when insufficient_privilege then raise notice 'ok : Bob ne peut pas écrire un brouillon au nom d''Alice'; end $$;
+reset role; reset request.jwt.claim.sub;
+select pg_temp.check((select data->>'title' from public.drafts where id = 'd_alice') = 'Brouillon' and (select count(*) from storage.objects where name = 'm_alice_brouillon') = 1, 'brouillon et fichier d''Alice intacts');
+-- Le public ne voit toujours rien
+set role anon;
+select pg_temp.check((select count(*) from storage.objects where name like 'm_alice%') = 0, 'public : aucun fichier d''Alice');
+do $$ begin
+  perform * from public.drafts; raise exception 'ÉCHEC : anon lit les brouillons';
+exception when insufficient_privilege then raise notice 'ok : anon ne lit pas les brouillons'; end $$;
+reset role;
+-- Alice supprime son compte
+set role authenticated; set request.jwt.claim.sub = '33333333-3333-3333-3333-333333333333';
+select public.delete_my_account();
+reset role; reset request.jwt.claim.sub;
+select pg_temp.check((select count(*) from auth.users where email = 'alice@test.fr') = 0 and (select count(*) from public.drafts where id = 'd_alice') = 0 and (select count(*) from public.user_data) = 0, 'suppression du compte : compte, brouillons et favoris effacés');
+select pg_temp.check((select owner_user_id is null from public.post_private where post_id = 'p_alice_pc'), 'contribution détachée du compte supprimé');
+set role authenticated; set request.jwt.claim.sub = '11111111-1111-1111-1111-111111111111';
+do $$ begin
+  perform public.delete_my_account(); raise exception 'ÉCHEC : admin supprimé';
+exception when raise_exception then if sqlerrm like 'ÉCHEC%' then raise; end if; raise notice 'ok : le compte admin ne se supprime pas par erreur'; end $$;
+reset role; reset request.jwt.claim.sub;
 \echo TOUS LES TESTS RLS SONT PASSÉS

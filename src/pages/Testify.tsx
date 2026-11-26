@@ -8,7 +8,7 @@ import { POST_TYPES, type MediaRef, type Post, type PostType, type SourceLink } 
 import { useData } from '../services/store';
 import * as repo from '../services/repository';
 import { getPseudonym, setPseudonym } from '../services/preferences';
-import { isAutomaticTranscriptionAvailable } from '../services/transcription';
+import { isAutomaticTranscriptionAvailable, transcriptionEngine, type TranscriptionProgress } from '../services/transcription';
 import { Recorder, LocalPreview, type AudioDraft } from '../components/Recorder';
 import { PostCard } from '../components/PostCard';
 import { Modal } from '../components/Modal';
@@ -53,6 +53,9 @@ export function Testify({ route }: { route: Route }) {
   const [audioRef, setAudioRef] = useState<MediaRef | null>(null); // audio déjà stocké (brouillon)
   const [publishVoice, setPublishVoice] = useState(true);
   const [transcription, setTranscription] = useState('');
+  const [autoTranscribed, setAutoTranscribed] = useState(false);
+  const [transcribing, setTranscribing] = useState<TranscriptionProgress | null>(null);
+  const [transcribeError, setTranscribeError] = useState('');
   const [images, setImages] = useState<ImageItem[]>([]);
   const [sources, setSources] = useState<SourceLink[]>([]);
   const [proofs, setProofs] = useState<(MediaRef | File)[]>([]);
@@ -67,6 +70,12 @@ export function Testify({ route }: { route: Route }) {
   useEffect(() => {
     if (founder) setAuthorName(settings.founderName);
   }, [founder, settings.founderName]);
+
+  // Compte connecté : l'adresse du compte est proposée comme e-mail privé de contact.
+  useEffect(() => {
+    if (!repo.isRemote || founder || draftId) return;
+    repo.getAuth().then((a) => a.email && setEmail((cur) => cur || a.email!));
+  }, [founder, draftId]);
 
   // Chargement d'un brouillon existant.
   useEffect(() => {
@@ -83,6 +92,7 @@ export function Testify({ route }: { route: Route }) {
     setAnonymous(existing.anonymous);
     setEmail(existing.private.email ?? '');
     setTranscription(existing.transcription ?? '');
+    setAutoTranscribed(existing.transcriptionSource === 'automatique');
     setSources(existing.sources);
     setProofs(existing.private.proofs ?? []);
     setConsentPub(existing.consent.publication);
@@ -180,7 +190,7 @@ export function Testify({ route }: { route: Route }) {
       images: keptImages,
       audio: audioInfo,
       transcription: transcription.trim() || undefined,
-      transcriptionSource: transcription.trim() ? 'manuelle' : undefined,
+      transcriptionSource: transcription.trim() ? (autoTranscribed ? 'automatique' : 'manuelle') : undefined,
       sources: cleanSources,
       verification: existing?.verification ?? (type === 'actualite' ? 'a_documenter' : 'non_verifie'),
       status,
@@ -203,7 +213,7 @@ export function Testify({ route }: { route: Route }) {
     setSaving(true);
     try {
       await persist('brouillon');
-      toast('Brouillon enregistré sur cet appareil.');
+      toast(repo.isRemote && (await repo.getAuth()).userId ? 'Brouillon enregistré (sur cet appareil et dans votre compte).' : 'Brouillon enregistré sur cet appareil.');
       if (!draftId) navigate(`/temoigner?brouillon=${id}${founder ? '&mode=fondateur' : ''}`);
     } catch (err) {
       setErrors([`Enregistrement impossible : ${err instanceof Error ? err.message : err}`]);
@@ -272,7 +282,7 @@ export function Testify({ route }: { route: Route }) {
             </p>
             <p className="muted small">
               {repo.isRemote
-                ? 'Vous pouvez suivre son statut dans « Mon espace », depuis cet appareil.'
+                ? 'Vous pouvez suivre son statut dans « Mon espace » (depuis cet appareil, ou depuis tous vos appareils si vous êtes connecté à votre compte).'
                 : 'Prototype V0.1 : la modération se fait localement, sur cet appareil. Vous pouvez suivre le statut dans « Mon espace ».'}
             </p>
           </>
@@ -409,10 +419,54 @@ export function Testify({ route }: { route: Route }) {
                   <textarea rows={4} value={transcription} onChange={(e) => setTranscription(e.target.value)} maxLength={12000} placeholder="Retranscrivez ce que vous dites dans l’enregistrement." data-testid="field-transcription" />
                   <small className="muted">
                     {isAutomaticTranscriptionAvailable()
-                      ? 'Transcription automatique disponible : relisez et corrigez-la avant envoi.'
-                      : 'La transcription automatique n’est pas encore disponible dans ce prototype : saisie manuelle. Elle ne remplace jamais votre enregistrement.'}
+                      ? 'Vous pouvez l’écrire vous-même ou demander une transcription automatique, à relire et corriger. Elle ne remplace jamais votre enregistrement.'
+                      : 'La transcription automatique n’est pas disponible sur ce navigateur : saisie manuelle. Elle ne remplace jamais votre enregistrement.'}
                   </small>
                 </label>
+                {isAutomaticTranscriptionAvailable() && audio && (
+                  <div className="transcribe" data-testid="auto-transcribe">
+                    <button
+                      type="button"
+                      className="btn btn--ghost btn--sm"
+                      disabled={Boolean(transcribing)}
+                      data-testid="auto-transcribe-button"
+                      onClick={async () => {
+                        if (transcription.trim() && !window.confirm('Remplacer la transcription actuelle par une transcription automatique ?')) return;
+                        setTranscribeError('');
+                        setTranscribing({ phase: 'preparation' });
+                        try {
+                          const text = await transcriptionEngine.transcribe(audio.blob, setTranscribing);
+                          if (!text) throw new Error('Aucune parole reconnue dans l’enregistrement.');
+                          setTranscription(text);
+                          setAutoTranscribed(true);
+                          toast('Transcription proposée : relisez-la et corrigez-la si besoin.');
+                        } catch (err) {
+                          setTranscribeError(err instanceof Error ? err.message : 'Transcription impossible.');
+                        } finally {
+                          setTranscribing(null);
+                        }
+                      }}
+                    >
+                      <Icon name="sparkle" size={16} />{' '}
+                      {!transcribing
+                        ? 'Transcrire automatiquement'
+                        : transcribing.phase === 'telechargement'
+                        ? `Téléchargement du modèle… ${Math.round(transcribing.percent ?? 0)} %`
+                        : transcribing.phase === 'transcription'
+                        ? 'Transcription en cours…'
+                        : 'Préparation…'}
+                    </button>
+                    <small className="muted">
+                      Gratuit, réalisé dans votre navigateur : votre voix ne quitte pas l’appareil. La première fois, un modèle d’environ 120 Mo est téléchargé (Wi-Fi conseillé),
+                      puis gardé en mémoire. Comptez environ le temps de l’enregistrement.
+                    </small>
+                    {transcribeError && (
+                      <p className="alert small" role="alert" data-testid="auto-transcribe-error">
+                        {transcribeError}
+                      </p>
+                    )}
+                  </div>
+                )}
               </>
             )}
           </fieldset>
@@ -510,7 +564,9 @@ export function Testify({ route }: { route: Route }) {
             <legend>Consentement</legend>
             <label className="check">
               <input type="checkbox" checked={consentPub} onChange={(e) => setConsentPub(e.target.checked)} data-testid="consent-publication" />
-              J’accepte que ma contribution soit examinée puis, si elle est validée, publiée sur Humanisons l’humain. Je pourrai demander son retrait à tout moment.
+              J’accepte que ma contribution soit examinée puis, si elle est validée, publiée sur Humanisons l’humain, selon les{' '}
+              <a href="#/cgu" target="_blank" rel="noopener">conditions d’utilisation</a> et la{' '}
+              <a href="#/confidentialite" target="_blank" rel="noopener">politique de confidentialité</a>. Je pourrai demander son retrait à tout moment.
             </label>
             {audio && publishVoice && (
               <label className="check">

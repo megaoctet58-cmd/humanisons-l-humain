@@ -7,7 +7,8 @@ import { useState } from 'react';
 import { STATUS_LABELS, isPublic, typeLabel, type Post } from '../models/types';
 import { useData } from '../services/store';
 import * as repo from '../services/repository';
-import { getPseudonym, setPseudonym } from '../services/preferences';
+import { getPseudonym } from '../services/preferences';
+import { AccountBox, useAuth } from '../components/Account';
 import { PostCard } from '../components/PostCard';
 import { Modal } from '../components/Modal';
 import { useToast } from '../components/Toast';
@@ -28,6 +29,8 @@ export function MySpace() {
   const [withdraw, setWithdraw] = useState<Post | null>(null);
   const [reason, setReason] = useState('');
   const [pseudo, setPseudo] = useState(getPseudonym);
+  const auth = useAuth();
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   const mine = posts.filter((p) => p.mine).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   const drafts = mine.filter((p) => p.status === 'brouillon');
@@ -56,10 +59,13 @@ export function MySpace() {
   return (
     <section className="page">
       <h1 className="page__title">Mon espace</h1>
-      <p className="notice">
-        Les comptes ne sont pas encore disponibles. Cet espace rassemble ce que vous avez créé <strong>sur cet appareil</strong>, dans ce navigateur
-        {repo.isRemote && <> : vos brouillons y restent, et vous y suivez les contributions envoyées d’ici</>}.
-      </p>
+      {repo.isRemote ? (
+        <AccountBox auth={auth} />
+      ) : (
+        <p className="notice">
+          Les comptes ne sont pas disponibles dans cette version locale. Cet espace rassemble ce que vous avez créé <strong>sur cet appareil</strong>, dans ce navigateur.
+        </p>
+      )}
       <div className="tabs" role="tablist">
         {tabs.map(([id, label, n]) => (
           <button key={id} role="tab" type="button" aria-selected={tab === id} className={cx('tab', tab === id && 'is-on')} onClick={() => setTab(id)}>
@@ -156,17 +162,61 @@ export function MySpace() {
             <span>Pseudonyme proposé par défaut</span>
             <input value={pseudo} onChange={(e) => setPseudo(e.target.value)} maxLength={60} />
           </label>
-          <button type="button" className="btn btn--sm" onClick={() => (setPseudonym(pseudo), toast('Pseudonyme enregistré.'))}>
+          <button type="button" className="btn btn--sm" onClick={() =>
+              repo
+                .savePseudonym(pseudo)
+                .then(() => toast('Pseudonyme enregistré.'))
+                .catch((e) => toast(e instanceof Error ? e.message : 'Enregistrement impossible.'))
+            }>
             Enregistrer
           </button>
           <h2 className="h3">Thème</h2>
           <ThemeChooser />
           <h2 className="h3">Vos données</h2>
           <p className="muted small">
-            {repo.isRemote
-              ? 'Vos brouillons, favoris et réactions restent uniquement dans ce navigateur. Une contribution n’est envoyée qu’au moment où vous la soumettez à la modération ; elle n’est visible de tous qu’après validation. Si vous effacez les données du site dans ce navigateur, vous ne pourrez plus suivre vos contributions ici (elles restent auprès de la modération).'
+            {repo.isRemote && auth?.userId
+              ? 'Vos brouillons, favoris, réactions et votre pseudonyme sont enregistrés avec votre compte, visibles de vous seul. Une contribution n’est visible de tous qu’après validation par la modération.'
+              : repo.isRemote
+              ? 'Sans compte, vos brouillons, favoris et réactions restent uniquement dans ce navigateur. Une contribution n’est envoyée qu’au moment où vous la soumettez à la modération ; elle n’est visible de tous qu’après validation. Si vous effacez les données du site dans ce navigateur, vous ne pourrez plus suivre vos contributions ici (elles restent auprès de la modération).'
               : 'Tout est conservé localement dans ce navigateur (IndexedDB). Rien n’est envoyé sur Internet dans cette version. Effacer les données du site dans votre navigateur supprime aussi vos contributions.'}
           </p>
+        </div>
+      )}
+
+      {tab === 'profil' && auth?.userId && !auth.isAdmin && (
+        <div className="block">
+          <h2 className="h3">Supprimer mon compte</h2>
+          <p className="muted small">
+            Efface votre compte, vos brouillons en ligne, vos favoris et vos réactions. Vos contributions déjà envoyées restent auprès de la modération, sans lien avec vous :
+            demandez d’abord leur retrait si vous le souhaitez.
+          </p>
+          {confirmDelete ? (
+            <div className="row wrap">
+              <button
+                type="button"
+                className="btn btn--danger btn--sm"
+                data-testid="account-delete-confirm"
+                onClick={async () => {
+                  try {
+                    await repo.deleteAccount();
+                    toast('Compte supprimé.');
+                  } catch (e) {
+                    toast(e instanceof Error ? e.message : 'Suppression impossible.');
+                  }
+                  setConfirmDelete(false);
+                }}
+              >
+                Oui, supprimer définitivement
+              </button>
+              <button type="button" className="btn btn--ghost btn--sm" onClick={() => setConfirmDelete(false)}>
+                Annuler
+              </button>
+            </div>
+          ) : (
+            <button type="button" className="btn btn--ghost btn--sm" onClick={() => setConfirmDelete(true)} data-testid="account-delete">
+              Supprimer mon compte
+            </button>
+          )}
         </div>
       )}
 

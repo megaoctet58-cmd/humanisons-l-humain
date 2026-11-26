@@ -16,6 +16,7 @@ import { MySpace } from './pages/MySpace';
 import { Manifesto } from './pages/Manifesto';
 import { Charter } from './pages/Charter';
 import { About } from './pages/About';
+import { LegalNotice, Privacy, Terms } from './pages/Legal';
 import { PostPage } from './pages/PostPage';
 import { Admin } from './pages/Admin';
 import { cx } from './lib/util';
@@ -48,6 +49,12 @@ function Page({ route }: { route: Route }) {
       return <Charter />;
     case 'a-propos':
       return <About />;
+    case 'confidentialite':
+      return <Privacy />;
+    case 'cgu':
+      return <Terms />;
+    case 'mentions-legales':
+      return <LegalNotice />;
     case 'publication':
       return <PostPage id={second ?? ''} />;
     case 'admin':
@@ -148,6 +155,15 @@ export function App() {
             </a>
             <a href="#/a-propos">
               <Icon name="info" size={18} /> À propos, confidentialité et limites
+            </a>
+            <a href="#/confidentialite">
+              <Icon name="shield" size={18} /> Confidentialité
+            </a>
+            <a href="#/cgu">
+              <Icon name="book" size={18} /> Conditions d’utilisation
+            </a>
+            <a href="#/mentions-legales">
+              <Icon name="info" size={18} /> Mentions légales
             </a>
             <a href="#/admin">
               <Icon name="shield" size={18} /> {repo.isRemote ? 'Administration' : 'Administration (démo locale)'}

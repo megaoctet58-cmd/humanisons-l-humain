@@ -19,7 +19,9 @@ const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD ?? 'motdepasse';
 const pool = new pg.Pool({ user: process.env.PGUSER ?? 'postgres' });
 const LOG = process.env.LOG === '1';
 
-const TABLES = { posts: 'id', post_private: 'post_id', reports: 'id', app_kv: 'key', admins: 'user_id' };
+const TABLES = { posts: 'id', post_private: 'post_id', reports: 'id', app_kv: 'key', admins: 'user_id', user_data: 'user_id', drafts: 'id' };
+/** Mots de passe des comptes de test (les comptes eux-mêmes sont dans auth.users). */
+const passwords = new Map([[ADMIN_EMAIL, ADMIN_PASSWORD], ['intrus@test.fr', 'intrus']]);
 const b64url = (s) => Buffer.from(s).toString('base64url');
 
 function jwt(user) {
@@ -203,11 +205,32 @@ async function storage(req, res, url, user) {
   send(res, 405, { message: 'non géré' });
 }
 
+function session(user) {
+  const now = Math.floor(Date.now() / 1000);
+  return {
+    access_token: jwt(user),
+    token_type: 'bearer',
+    expires_in: 3600,
+    expires_at: now + 3600,
+    refresh_token: 'rt-' + user.id,
+    user: { id: user.id, aud: 'authenticated', role: 'authenticated', email: user.email, app_metadata: {}, user_metadata: {}, created_at: new Date().toISOString() },
+  };
+}
+
 async function auth(req, res, url) {
+  if (url.pathname === '/auth/v1/signup') {
+    const { email, password } = JSON.parse((await body(req)).toString());
+    if (process.env.SIGNUP_DISABLED === '1') return send(res, 422, { code: 'signup_disabled', msg: 'Signups not allowed for this instance' });
+    const exists = await pool.query('select 1 from auth.users where email = $1', [email]);
+    if (exists.rows.length) return send(res, 422, { code: 'user_already_exists', msg: 'User already registered' });
+    const r = await pool.query('insert into auth.users (email) values ($1) returning id, email', [email]);
+    passwords.set(email, password);
+    return send(res, 200, session(r.rows[0]));
+  }
   if (url.pathname === '/auth/v1/token') {
     const { email, password } = JSON.parse((await body(req)).toString());
     const r = await pool.query('select id, email from auth.users where email = $1', [email]);
-    const ok = r.rows.length && password === (email === ADMIN_EMAIL ? ADMIN_PASSWORD : 'intrus');
+    const ok = r.rows.length && password === passwords.get(email);
     if (!ok) return send(res, 400, { error: 'invalid_grant', error_description: 'Invalid login credentials', code: 'invalid_credentials', msg: 'Invalid login credentials' });
     const user = r.rows[0];
     const now = Math.floor(Date.now() / 1000);

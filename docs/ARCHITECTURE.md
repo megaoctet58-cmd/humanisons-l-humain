@@ -34,9 +34,21 @@
   et chaque minute.
 - Transfert des données V0.1 : Administration → Paramètres → « Envoyer vers la base partagée ».
 
+## V0.3 — comptes, transcription, pages légales
+
+- Comptes : Supabase Auth (e-mail + mot de passe, sans confirmation tant qu'aucun service d'e-mails
+  n'est branché). Tables `user_data` (pseudonyme, favoris, réactions) et `drafts` ; colonne
+  `post_private.owner_user_id`. Fonctions `claim_contributions`, `delete_my_account` ;
+  `my_contributions` renvoie aussi les contributions du compte. Fichiers : un compte lit et écrit
+  ceux de ses brouillons, et lit ceux de ses contributions.
+- Transcription : `services/transcription.ts` décode l'audio en 16 kHz mono et l'envoie à
+  `services/whisper.worker.ts` (Transformers.js, `onnx-community/whisper-base`, WASM).
+  Le moteur WebAssembly est servi par le site lui-même ; le modèle vient de huggingface.co.
+- Pages légales : `pages/Legal.tsx`, données d'identité dans `data/legal.ts`.
+
 ## Suite possible
 
-1. Comptes contributeurs (Supabase Auth, lien magique) et rôle `moderateur`.
+1. Service d'e-mails gratuit (Brevo…) pour confirmation d'inscription et mot de passe oublié ; rôle `moderateur`.
 2. Pagination du fil côté serveur quand il dépassera quelques centaines de publications.
 3. Transcription : implémenter `TranscriptionEngine` (`src/services/transcription.ts`) avec
    whisper.cpp en WebAssembly (gratuit, local au navigateur).

@@ -16,7 +16,8 @@
 import { REMOTE } from '../config';
 import * as local from './local';
 import * as remote from './remote';
-import type { Category, MediaRef, Post, Report, Settings } from '../models/types';
+import type { Category, MediaRef, Post, ReactionId, Report, Settings } from '../models/types';
+import { getPseudonym, setPseudonym } from './preferences';
 import { DEFAULT_CATEGORIES } from '../data/categories';
 
 export const isRemote = REMOTE;
@@ -24,7 +25,7 @@ export const subscribe = local.subscribe;
 const notify = local.notify;
 
 /* ------------------------------------------------------------------ */
-/* Connexion administrateur                                             */
+/* Connexion (administrateur ou compte contributeur facultatif)         */
 /* ------------------------------------------------------------------ */
 
 export type AuthState = remote.AuthState;
@@ -54,8 +55,56 @@ export async function signIn(email: string, password: string): Promise<AuthState
   await remote.signIn(email, password);
   authPromise = null;
   const a = await getAuth();
+  await syncAfterLogin(a).catch(() => undefined);
   notify();
   return a;
+}
+
+/** Création d'un compte contributeur (facultatif). */
+export async function signUp(email: string, password: string): Promise<AuthState> {
+  const connected = await remote.signUp(email, password);
+  if (!connected) throw new Error('Compte créé. Confirmez votre adresse grâce à l’e-mail reçu, puis connectez-vous.');
+  authPromise = null;
+  const a = await getAuth();
+  await syncAfterLogin(a).catch(() => undefined);
+  notify();
+  return a;
+}
+
+/**
+ * À la connexion : rattache au compte ce qui a été fait sur cet appareil
+ * (contributions envoyées, brouillons, favoris, réactions, pseudonyme).
+ */
+async function syncAfterLogin(a: AuthState) {
+  if (!a.userId) return;
+  const localAll = await local.listPosts();
+  const sent = localAll.filter((p) => p.mine && p.status !== 'brouillon' && p.private.ownerToken);
+  await remote.claimContributions(sent.map((p) => ({ id: p.id, token: p.private.ownerToken! })));
+  for (const d of localAll.filter((p) => p.status === 'brouillon')) await pushDraft(a.userId, d).catch(() => undefined);
+  const [ud, favs, reacts] = await Promise.all([remote.getUserData(), local.getFavorites(), local.getMyReactions()]);
+  const mergedFavs = [...new Set([...(ud?.favorites ?? []), ...favs])];
+  const mergedReacts: Record<string, ReactionId[]> = { ...(ud?.reactions ?? {}) };
+  for (const [k, v] of Object.entries(reacts)) mergedReacts[k] = [...new Set([...(mergedReacts[k] ?? []), ...v])];
+  const pseudonym = ud?.pseudonym || getPseudonym() || null;
+  if (pseudonym) setPseudonym(pseudonym);
+  await remote.saveUserData(a.userId, { favorites: mergedFavs, reactions: mergedReacts, pseudonym });
+}
+
+/** Supprime le compte contributeur (ses brouillons en ligne et leurs fichiers compris). */
+export async function deleteAccount(): Promise<void> {
+  const drafts = await remote.listDrafts().catch(() => [] as Post[]);
+  const ids = drafts.flatMap((d) => mediaRefs(d).map((r) => r.id));
+  await remote.removeMedia(ids).catch(() => undefined);
+  await remote.deleteAccount();
+  authPromise = Promise.resolve({ isAdmin: false });
+  notify();
+}
+
+/** Pseudonyme proposé par défaut (synchronisé avec le compte si l'on est connecté). */
+export async function savePseudonym(p: string): Promise<void> {
+  setPseudonym(p);
+  const a = await getAuth();
+  if (REMOTE && a.userId) await remote.saveUserData(a.userId, { pseudonym: p.trim() || null });
 }
 
 export async function signOut(): Promise<void> {
@@ -88,24 +137,61 @@ export async function listPosts(): Promise<Post[]> {
   const map = new Map(remotePosts.map((p) => [p.id, p]));
 
   const sent = keepLocal.filter((p) => p.mine && p.status !== 'brouillon' && p.private.ownerToken);
-  const tracked = await remote.myContributions(sent.map((p) => ({ id: p.id, token: p.private.ownerToken! }))).catch(() => [] as remote.Tracked[]);
+  const signedIn = Boolean(auth.userId);
+  const tracked = await remote
+    .myContributions(
+      sent.map((p) => ({ id: p.id, token: p.private.ownerToken! })),
+      signedIn,
+    )
+    .catch(() => [] as remote.Tracked[]);
   const trackedById = new Map(tracked.map((t) => [t.id, t]));
+
+  // Compte connecté : brouillons et contributions envoyées depuis d'autres appareils.
+  if (signedIn) {
+    const localIds = new Set(keepLocal.map((p) => p.id));
+    const drafts = await remote.listDrafts().catch(() => [] as Post[]);
+    for (const d of drafts) {
+      const lp = keepLocal.find((p) => p.id === d.id);
+      if (!lp) keepLocal.push(d);
+      else if (lp.status === 'brouillon' && d.updatedAt > lp.updatedAt) keepLocal[keepLocal.indexOf(lp)] = d;
+    }
+    for (const t of tracked) {
+      if (localIds.has(t.id)) continue;
+      const r = map.get(t.id);
+      map.set(t.id, {
+        ...(r ?? remote.fromRow({ ...t, created_at: t.created_at ?? undefined })),
+        mine: true,
+        private: {
+          ...(r?.private ?? {}),
+          email: t.email ?? undefined,
+          proofs: t.proofs ?? undefined,
+          messageToAuthor: t.message_to_author ?? undefined,
+          withdrawalRequested: t.withdrawal_requested || undefined,
+        },
+      });
+    }
+  }
 
   for (const lp of keepLocal) {
     const r = map.get(lp.id);
-    if (lp.status === 'brouillon') {
-      if (!r) map.set(lp.id, lp);
-      continue;
-    }
     const t = trackedById.get(lp.id);
-    const base = r ?? (t ? remote.fromRow(t) : lp);
+    if (lp.status === 'brouillon') {
+      if (t) {
+        // Brouillon envoyé depuis un autre appareil du même compte : la copie locale n'a plus lieu d'être.
+        local.deletePost(lp.id).catch(() => undefined);
+      } else {
+        if (!r) map.set(lp.id, lp);
+        continue;
+      }
+    }
+    const base = r ?? (t ? remote.fromRow({ ...t, created_at: t.created_at ?? undefined }) : lp);
     map.set(lp.id, {
       ...base,
       mine: true,
       private: {
         ...lp.private,
         ...(r?.private ?? {}),
-        ...(t ? { messageToAuthor: t.message_to_author ?? undefined, withdrawalRequested: t.withdrawal_requested || undefined } : {}),
+        ...(t ? { messageToAuthor: t.message_to_author ?? undefined, withdrawalRequested: t.withdrawal_requested || undefined, proofs: t.proofs ?? lp.private.proofs } : {}),
         ownerToken: lp.private.ownerToken,
       },
     });
@@ -139,10 +225,24 @@ function randomToken(): string {
   return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
 }
 
-export async function savePost(post: Post): Promise<Post> {
-  if (!REMOTE || post.status === 'brouillon') return local.savePost(post);
+/** Brouillon d'un compte connecté : enregistré en ligne (le texte d'abord, puis les fichiers). */
+async function pushDraft(userId: string, post: Post) {
+  await remote.saveDraft(userId, post);
+  await uploadRefs(post);
+}
 
-  if ((await getAuth()).isAdmin) {
+export async function savePost(post: Post): Promise<Post> {
+  if (!REMOTE) return local.savePost(post);
+  const auth = await getAuth();
+
+  if (post.status === 'brouillon') {
+    const saved = await local.savePost(post);
+    if (auth.userId) await pushDraft(auth.userId, saved).catch(() => undefined); // reste au moins sur l'appareil
+    return saved;
+  }
+  if (auth.userId) remote.deleteDraft(post.id).catch(() => undefined);
+
+  if (auth.isAdmin) {
     await uploadRefs(post);
     const saved = await remote.upsertPost(post);
     const loc = await local.getPost(post.id);
@@ -151,7 +251,7 @@ export async function savePost(post: Post): Promise<Post> {
     return saved;
   }
 
-  // Contributeur sans compte : il ne peut qu'envoyer à la modération.
+  // Contributeur (avec ou sans compte) : il ne peut qu'envoyer à la modération.
   if (post.status !== 'en_attente') throw new Error('Publication directe : connexion administrateur requise.');
   const loc = await local.getPost(post.id);
   const token = post.private.ownerToken ?? loc?.private.ownerToken ?? randomToken();
@@ -169,8 +269,8 @@ export async function savePost(post: Post): Promise<Post> {
 /** Demande de retrait d'une contribution envoyée depuis cet appareil. */
 export async function requestWithdrawal(post: Post, reason?: string): Promise<void> {
   const updated: Post = { ...post, private: { ...post.private, withdrawalRequested: true, withdrawalReason: reason } };
-  if (REMOTE && post.private.ownerToken) {
-    await remote.requestWithdrawal(post.id, post.private.ownerToken, reason);
+  if (REMOTE && (post.private.ownerToken || (await getAuth()).userId)) {
+    await remote.requestWithdrawal(post.id, post.private.ownerToken ?? '', reason);
     const loc = await local.getPost(post.id);
     if (loc) await local.savePost({ ...loc, private: { ...loc.private, withdrawalRequested: true, withdrawalReason: reason } });
     else notify();
@@ -184,7 +284,12 @@ export async function deletePost(id: string): Promise<void> {
   if (!REMOTE) return local.deletePost(id);
   const loc = await local.getPost(id);
   const known = lastPosts.get(id);
-  if (known && known.status !== 'brouillon' && (await getAuth()).isAdmin) {
+  const auth = await getAuth();
+  if (auth.userId && (known ?? loc)?.status === 'brouillon') {
+    await remote.removeMedia(mediaRefs(known ?? loc).map((r) => r.id)).catch(() => undefined);
+    await remote.deleteDraft(id).catch(() => undefined);
+  }
+  if (known && known.status !== 'brouillon' && auth.isAdmin) {
     await remote.deletePost(
       id,
       mediaRefs(known).map((r) => r.id),
@@ -228,7 +333,9 @@ export async function deleteMedia(id: string): Promise<void> {
   if (u) URL.revokeObjectURL(u);
   urlCache.delete(id);
   uploaded.delete(id);
-  if ((await getAuth()).isAdmin) await remote.removeMedia([id]).catch(() => undefined);
+  // Admin : tout fichier. Compte contributeur : seulement les fichiers de ses brouillons (règle de la base).
+  const a = await getAuth();
+  if (a.isAdmin || a.userId) await remote.removeMedia([id]).catch(() => undefined);
 }
 
 /* ------------------------------------------------------------------ */
@@ -265,10 +372,44 @@ export async function saveSettings(s: Settings): Promise<void> {
   notify();
 }
 
-export const getFavorites = local.getFavorites;
-export const toggleFavorite = local.toggleFavorite;
-export const getMyReactions = local.getMyReactions;
-export const toggleReaction = local.toggleReaction;
+/** Compte connecté : favoris et réactions suivent la personne sur tous ses appareils. */
+async function accountData(): Promise<{ userId: string; data: remote.UserData } | undefined> {
+  if (!REMOTE) return undefined;
+  const a = await getAuth();
+  if (!a.userId) return undefined;
+  const data = (await remote.getUserData().catch(() => undefined)) ?? { favorites: [], reactions: {} };
+  return { userId: a.userId, data };
+}
+
+export async function getFavorites(): Promise<string[]> {
+  const acc = await accountData();
+  return acc ? acc.data.favorites : local.getFavorites();
+}
+
+export async function toggleFavorite(postId: string): Promise<boolean> {
+  const acc = await accountData();
+  if (!acc) return local.toggleFavorite(postId);
+  const has = acc.data.favorites.includes(postId);
+  const favorites = has ? acc.data.favorites.filter((f) => f !== postId) : [postId, ...acc.data.favorites];
+  await remote.saveUserData(acc.userId, { favorites });
+  notify();
+  return !has;
+}
+
+export async function getMyReactions(): Promise<Record<string, ReactionId[]>> {
+  const acc = await accountData();
+  return acc ? acc.data.reactions : local.getMyReactions();
+}
+
+export async function toggleReaction(postId: string, r: ReactionId): Promise<void> {
+  const acc = await accountData();
+  if (!acc) return local.toggleReaction(postId, r);
+  const all = { ...acc.data.reactions };
+  const cur = all[postId] ?? [];
+  all[postId] = cur.includes(r) ? cur.filter((x) => x !== r) : [...cur, r];
+  await remote.saveUserData(acc.userId, { reactions: all });
+  notify();
+}
 
 /* ------------------------------------------------------------------ */
 /* Signalements                                                        */

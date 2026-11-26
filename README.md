@@ -95,6 +95,7 @@ supabase/schema.sql      Tables, règles d'accès (RLS) et stockage des fichiers
 supabase/tests/          Tests des règles d'accès + faux Supabase pour les tests
 tests/parcours.e2e.mjs   Test automatisé du parcours en 14 étapes (mode local)
 tests/partage.e2e.mjs    Test « plusieurs appareils » (base partagée)
+tests/comptes.e2e.mjs    Test des comptes contributeurs (base partagée)
 docs/                    Architecture, limites, suite du projet
 ```
 
@@ -105,8 +106,10 @@ Les composants n'accèdent jamais au stockage directement : tout passe par `serv
 
 - **Mode local** : administration non sécurisée, et une contribution déposée sur un téléphone n'est
   visible que sur ce téléphone. Le mode « base partagée » corrige les deux.
-- **Pas de comptes contributeurs** : « Mon espace » suit les contributions envoyées depuis cet appareil
-  (grâce à un jeton secret gardé dans le navigateur).
+- **Comptes contributeurs facultatifs** : sans compte, « Mon espace » suit les contributions envoyées
+  depuis cet appareil (jeton secret gardé dans le navigateur). Pas encore de « mot de passe oublié »
+  automatique (il faudra un service d'e-mails).
+- **Transcription automatique** : dans le navigateur, modèle d'environ 120 Mo téléchargé une fois.
 - **Offre gratuite Supabase** : 1 Go de fichiers, mise en veille après 7 jours sans visite (réveil en un clic).
 - **Transcription automatique non disponible** : saisie manuelle uniquement (aucune simulation).
 - **Exemples fictifs** : 6 publications de démonstration, sons synthétiques (aucune voix réelle).
