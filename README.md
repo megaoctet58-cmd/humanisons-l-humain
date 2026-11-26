@@ -99,3 +99,11 @@ on remplace `services/repository.ts` (voir `docs/ARCHITECTURE.md`).
 - Safari iOS : enregistrement en `audio/mp4`, pause/reprise selon la version.
 
 Voir `CHANGELOG.md` pour le journal des modifications.
+
+## Mise en ligne gratuite (GitHub Pages)
+
+Le fichier `.github/workflows/deploy-pages.yml` construit et publie l'application à chaque envoi sur `main`.
+Activation, une seule fois : dépôt GitHub → **Settings → Pages → Source : « GitHub Actions »**.
+L'adresse sera `https://<compte>.github.io/humanisons-l-humain/` (HTTPS : le micro fonctionne sur smartphone).
+GitHub Pages est gratuit pour un dépôt **public** ; pour un dépôt privé, il faut un abonnement GitHub payant.
+Rappel : chaque appareil garde ses propres données (pas encore de base partagée).
