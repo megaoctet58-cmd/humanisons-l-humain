@@ -12,6 +12,8 @@
 - **Pages légales** : politique de confidentialité, conditions d'utilisation, mentions légales
   (identité de l'éditeur dans `src/data/legal.ts`). Liens dans le menu et au moment du consentement.
 - Tests : `tests/comptes.e2e.mjs` (deux appareils, un compte).
+- Vérifié en ligne par Jérémy le 26 novembre 2026 sur le vrai projet Supabase : création de compte,
+  synchronisation entre téléphone et ordinateur, transcription automatique en français.
 
 ## V0.2.0 — 26 novembre 2026
 
