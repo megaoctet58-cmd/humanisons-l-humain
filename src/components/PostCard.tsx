@@ -63,10 +63,14 @@ export function PostCard({ post, full = false }: { post: Post; full?: boolean })
   };
 
   const sendReport = async () => {
-    await repo.addReport(post.id, reason, details.trim() || undefined);
-    setReporting(false);
-    setDetails('');
-    toast('Merci. Votre signalement sera examiné par une personne.');
+    try {
+      await repo.addReport(post.id, reason, details.trim() || undefined);
+      setReporting(false);
+      setDetails('');
+      toast('Merci. Votre signalement sera examiné par une personne.');
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'Signalement impossible pour le moment.');
+    }
   };
 
   return (

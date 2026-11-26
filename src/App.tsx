@@ -19,6 +19,7 @@ import { About } from './pages/About';
 import { PostPage } from './pages/PostPage';
 import { Admin } from './pages/Admin';
 import { cx } from './lib/util';
+import * as repo from './services/repository';
 
 const NAV = [
   { to: '/', key: '', label: 'Le fil', icon: 'feed' },
@@ -149,7 +150,7 @@ export function App() {
               <Icon name="info" size={18} /> À propos, confidentialité et limites
             </a>
             <a href="#/admin">
-              <Icon name="shield" size={18} /> Administration (démo locale)
+              <Icon name="shield" size={18} /> {repo.isRemote ? 'Administration' : 'Administration (démo locale)'}
             </a>
             <div className="drawer__section">
               <p className="small muted">Thème</p>
@@ -162,7 +163,7 @@ export function App() {
 
       {error && (
         <p className="alert page" role="alert">
-          Le stockage local est indisponible : {error} Les contributions ne pourront pas être enregistrées.
+          {repo.isRemote ? <>Les publications n’ont pas pu être chargées. {error}</> : <>Le stockage local est indisponible : {error} Les contributions ne pourront pas être enregistrées.</>}
         </p>
       )}
 

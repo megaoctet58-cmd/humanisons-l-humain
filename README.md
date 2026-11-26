@@ -1,11 +1,20 @@
-# HUMANISONS L'HUMAIN (HLH) — Prototype V0.1
+# HUMANISONS L'HUMAIN (HLH) — Prototype V0.2
 
 > Un réseau humain plutôt qu'un réseau social.
 > Observer · Écouter · Questionner · Humaniser.
 
 Prototype **local** et fonctionnel : fil chronologique, témoignages écrits et vocaux (vrai micro),
 modération locale, réactions empathiques, favoris, brouillons, thèmes clair/sombre.
-Toutes les données restent dans le navigateur (IndexedDB). Aucun service payant, aucun traceur.
+Aucun service payant, aucun traceur.
+
+**Deux modes de fonctionnement :**
+
+- **Local** (par défaut, comme la V0.1) : tout reste dans le navigateur de chaque appareil (IndexedDB).
+- **Base partagée** (V0.2, facultatif) : dès que `src/config.ts` reçoit l'adresse et la clé publique
+  d'un projet Supabase gratuit, publications, contributions et fichiers sont partagés entre tous les
+  appareils, et l'administration est protégée par e-mail + mot de passe.
+  Mise en place pas à pas : [`docs/MISE-EN-PLACE-SUPABASE.md`](docs/MISE-EN-PLACE-SUPABASE.md).
+  Sécurité (RLS) : [`supabase/schema.sql`](supabase/schema.sql).
 
 ## Installer et lancer
 
@@ -67,7 +76,9 @@ src/
   models/types.ts        Modèles de données (publication, statuts, réactions…)
   services/
     db.ts                Accès IndexedDB (aucune dépendance)
-    repository.ts        Couche « dépôt » : TOUTES les lectures/écritures passent ici
+    repository.ts        Couche « dépôt » : TOUTES les lectures/écritures passent ici (choisit local ou partagé)
+    local.ts             Stockage dans le navigateur (mode local, brouillons, favoris, copies des envois)
+    remote.ts            Base partagée Supabase (chargée seulement si configurée)
     store.tsx            État partagé React + rafraîchissement (y compris entre onglets)
     selectors.ts         Fil chronologique, recherche, filtres (aucun tri par popularité)
     preferences.ts       localStorage : thème, pseudonyme, vitesse de lecture
@@ -79,19 +90,24 @@ src/
   pages/                 Fil, Explorer, Témoigner, Les voix, Mon espace, Manifeste, Charte, Admin…
   data/                  Catégories initiales + exemples fictifs (marqués « Exemple fictif »)
   lib/                   Utilitaires, analyse audio, routeur par hash
-tests/parcours.e2e.mjs   Test automatisé du parcours en 14 étapes
+  config.ts              Adresse + clé PUBLIQUE de Supabase (vide = mode local)
+supabase/schema.sql      Tables, règles d'accès (RLS) et stockage des fichiers
+supabase/tests/          Tests des règles d'accès + faux Supabase pour les tests
+tests/parcours.e2e.mjs   Test automatisé du parcours en 14 étapes (mode local)
+tests/partage.e2e.mjs    Test « plusieurs appareils » (base partagée)
 docs/                    Architecture, limites, suite du projet
 ```
 
-Les composants n'accèdent jamais à IndexedDB directement : pour passer à Supabase/PostgreSQL,
-on remplace `services/repository.ts` (voir `docs/ARCHITECTURE.md`).
+Les composants n'accèdent jamais au stockage directement : tout passe par `services/repository.ts`
+(voir `docs/ARCHITECTURE.md`).
 
 ## Limites connues (honnêtement)
 
-- **Administration non sécurisée** : pas de mot de passe, accessible à quiconque utilise le navigateur.
-- **Pas de vrais comptes** : « Mon espace » = cet appareil.
-- **Données locales** : une contribution déposée sur un téléphone n'est visible que sur ce téléphone.
-  La modération se fait donc sur le même appareil. Un vrai serveur est l'objet de la phase 4.
+- **Mode local** : administration non sécurisée, et une contribution déposée sur un téléphone n'est
+  visible que sur ce téléphone. Le mode « base partagée » corrige les deux.
+- **Pas de comptes contributeurs** : « Mon espace » suit les contributions envoyées depuis cet appareil
+  (grâce à un jeton secret gardé dans le navigateur).
+- **Offre gratuite Supabase** : 1 Go de fichiers, mise en veille après 7 jours sans visite (réveil en un clic).
 - **Transcription automatique non disponible** : saisie manuelle uniquement (aucune simulation).
 - **Exemples fictifs** : 6 publications de démonstration, sons synthétiques (aucune voix réelle).
   Suppression en un clic : Administration → Paramètres et données.
@@ -106,4 +122,4 @@ Le fichier `.github/workflows/deploy-pages.yml` construit et publie l'applicatio
 Activation, une seule fois : dépôt GitHub → **Settings → Pages → Source : « GitHub Actions »**.
 L'adresse sera `https://<compte>.github.io/humanisons-l-humain/` (HTTPS : le micro fonctionne sur smartphone).
 GitHub Pages est gratuit pour un dépôt **public** ; pour un dépôt privé, il faut un abonnement GitHub payant.
-Rappel : chaque appareil garde ses propres données (pas encore de base partagée).
+En mode local, chaque appareil garde ses propres données ; en mode base partagée, tout le monde voit les mêmes publications.

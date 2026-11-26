@@ -36,10 +36,14 @@ export function MySpace() {
 
   const requestWithdrawal = async () => {
     if (!withdraw) return;
-    await repo.savePost({ ...withdraw, private: { ...withdraw.private, withdrawalRequested: true, withdrawalReason: reason.trim() || undefined } });
-    setWithdraw(null);
-    setReason('');
-    toast('Demande de retrait transmise à la modération.');
+    try {
+      await repo.requestWithdrawal(withdraw, reason.trim() || undefined);
+      setWithdraw(null);
+      setReason('');
+      toast('Demande de retrait transmise à la modération.');
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'Demande impossible pour le moment.');
+    }
   };
 
   const tabs: [Tab, string, number?][] = [
@@ -53,7 +57,8 @@ export function MySpace() {
     <section className="page">
       <h1 className="page__title">Mon espace</h1>
       <p className="notice">
-        Les comptes ne sont pas encore disponibles dans ce prototype. Cet espace rassemble ce que vous avez créé <strong>sur cet appareil</strong>, dans ce navigateur.
+        Les comptes ne sont pas encore disponibles. Cet espace rassemble ce que vous avez créé <strong>sur cet appareil</strong>, dans ce navigateur
+        {repo.isRemote && <> : vos brouillons y restent, et vous y suivez les contributions envoyées d’ici</>}.
       </p>
       <div className="tabs" role="tablist">
         {tabs.map(([id, label, n]) => (
@@ -158,7 +163,9 @@ export function MySpace() {
           <ThemeChooser />
           <h2 className="h3">Vos données</h2>
           <p className="muted small">
-            Tout est conservé localement dans ce navigateur (IndexedDB). Rien n’est envoyé sur Internet dans cette version. Effacer les données du site dans votre navigateur supprime aussi vos contributions.
+            {repo.isRemote
+              ? 'Vos brouillons, favoris et réactions restent uniquement dans ce navigateur. Une contribution n’est envoyée qu’au moment où vous la soumettez à la modération ; elle n’est visible de tous qu’après validation. Si vous effacez les données du site dans ce navigateur, vous ne pourrez plus suivre vos contributions ici (elles restent auprès de la modération).'
+              : 'Tout est conservé localement dans ce navigateur (IndexedDB). Rien n’est envoyé sur Internet dans cette version. Effacer les données du site dans votre navigateur supprime aussi vos contributions.'}
           </p>
         </div>
       )}

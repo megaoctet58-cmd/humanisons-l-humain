@@ -133,7 +133,8 @@ export async function seedDemoData(): Promise<void> {
 
 /** Initialise les données au tout premier lancement. */
 export async function ensureSeeded(): Promise<void> {
-  if (await repo.isSeeded()) return;
+  // Base partagée : rien n'est créé automatiquement (l'admin peut recréer les exemples).
+  if (repo.isRemote || (await repo.isSeeded())) return;
   await repo.markSeeded();
   await seedDemoData();
 }

@@ -271,7 +271,9 @@ export function Testify({ route }: { route: Route }) {
               l’examiner avant toute publication.
             </p>
             <p className="muted small">
-              Prototype V0.1 : la modération se fait localement, sur cet appareil. Vous pouvez suivre le statut dans « Mon espace ».
+              {repo.isRemote
+                ? 'Vous pouvez suivre son statut dans « Mon espace », depuis cet appareil.'
+                : 'Prototype V0.1 : la modération se fait localement, sur cet appareil. Vous pouvez suivre le statut dans « Mon espace ».'}
             </p>
           </>
         ) : (
@@ -281,9 +283,11 @@ export function Testify({ route }: { route: Route }) {
           <a className="btn" href="#/mon-espace">
             Suivre dans Mon espace
           </a>
-          <a className="btn btn--ghost" href="#/admin">
-            Ouvrir l’administration locale
-          </a>
+          {(!repo.isRemote || sent === 'publie') && (
+            <a className="btn btn--ghost" href="#/admin">
+              {repo.isRemote ? 'Retour à l’administration' : 'Ouvrir l’administration locale'}
+            </a>
+          )}
           <a className="btn btn--ghost" href="#/">
             Retour au fil
           </a>

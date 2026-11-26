@@ -100,7 +100,7 @@ export function AudioProvider({ children }: { children: ReactNode }) {
     const url = await repo.mediaUrl(t.mediaId);
     if (trackRef.current?.id !== t.id) return;
     if (!url) {
-      setS((x) => ({ ...x, loading: false, error: 'Fichier audio introuvable sur cet appareil.' }));
+      setS((x) => ({ ...x, loading: false, error: repo.isRemote ? 'Fichier audio introuvable ou indisponible pour le moment.' : 'Fichier audio introuvable sur cet appareil.' }));
       return;
     }
     a.src = url;

@@ -90,6 +90,14 @@ export interface PrivateInfo {
   messageToAuthor?: string; // demande de précisions / proposition de modifications
   withdrawalRequested?: boolean;
   withdrawalReason?: string;
+  /** Pseudonyme saisi par un auteur qui a choisi l'anonymat (visible de la modération seulement). */
+  hiddenAuthorName?: string;
+  /**
+   * Jeton secret gardé UNIQUEMENT sur l'appareil du contributeur : il lui permet
+   * de suivre sa contribution et d'en demander le retrait. La base n'en conserve
+   * qu'une empreinte (sha256), jamais le jeton lui-même.
+   */
+  ownerToken?: string;
 }
 
 export interface Post {

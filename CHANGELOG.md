@@ -1,5 +1,23 @@
 # Journal des modifications
 
+## V0.2.0 — 26 novembre 2026
+
+Base partagée (Supabase, offre gratuite), activée dès que `src/config.ts` est rempli.
+Sans configuration, le site fonctionne exactement comme la V0.1.
+
+- Publications, contributions, voix, images, signalements, catégories et paramètres partagés
+  entre tous les appareils.
+- Administration protégée par e-mail + mot de passe ; seuls les comptes de la table `admins`
+  administrent. Protection réelle dans la base (règles RLS), pas seulement dans l'interface.
+- Contributions en attente, e-mails, justificatifs, notes et voix non autorisées : jamais lisibles
+  publiquement (39 vérifications automatiques des règles d'accès).
+- « Mon espace » suit le statut des contributions envoyées depuis l'appareil, affiche le message de
+  la modération, permet de compléter et de demander le retrait.
+- Transfert en un clic des publications restées sur un appareil (V0.1) vers la base partagée.
+- Sauvegarde complète (fichiers et données privées compris) et restauration depuis l'administration.
+- Textes « À propos » et « Mon espace » adaptés au mode partagé.
+- Tests : `supabase/tests/rls-test.sql` et `tests/partage.e2e.mjs` (trois appareils, 14 étapes).
+
 ## V0.1.1 — 26 novembre 2026
 
 - Le fondateur apparaît sous son nom : « Jérémy » par défaut (modifiable dans Administration → Paramètres), signature du manifeste.

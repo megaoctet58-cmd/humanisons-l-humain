@@ -1,10 +1,12 @@
 /**
- * Administration LOCALE de démonstration.
+ * Administration.
  *
- * ⚠ Non sécurisée : elle n'est protégée par aucun mot de passe et fonctionne
- * uniquement sur les données de ce navigateur. Avant toute mise en ligne
- * publique, elle devra être placée derrière une authentification avec rôles
- * (fondateur, modérateurs) et des règles d'accès côté serveur.
+ * • Base partagée (Supabase) : réservée à l'administrateur connecté. La
+ *   protection réelle est dans la base (règles RLS de supabase/schema.sql) :
+ *   sans connexion admin, la base ne renvoie ni les contributions en attente,
+ *   ni les données privées, et refuse toute modification.
+ * • Sans base partagée : administration locale de démonstration (V0.1), non
+ *   sécurisée, qui ne gère que les données de ce navigateur.
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -61,14 +63,18 @@ function Review({ post, onClose }: { post: Post; onClose: () => void }) {
   useEffect(() => headRef.current?.focus(), [post.id]);
 
   const save = async (patch: Partial<Post>, msg: string) => {
-    await repo.savePost({
-      ...post,
-      ...(edit ? { title: draft.title, text: draft.text, transcription: draft.transcription, categoryId: draft.categoryId, type: draft.type, reflection: draft.reflection } : {}),
-      ...patch,
-      private: { ...post.private, moderationNotes: notes.trim() || undefined, messageToAuthor: message.trim() || undefined, ...(patch.private ?? {}) },
-    });
-    setEdit(false);
-    toast(msg);
+    try {
+      await repo.savePost({
+        ...post,
+        ...(edit ? { title: draft.title, text: draft.text, transcription: draft.transcription, categoryId: draft.categoryId, type: draft.type, reflection: draft.reflection } : {}),
+        ...patch,
+        private: { ...post.private, moderationNotes: notes.trim() || undefined, messageToAuthor: message.trim() || undefined, ...(patch.private ?? {}) },
+      });
+      setEdit(false);
+      toast(msg);
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'Enregistrement impossible.');
+    }
   };
 
   const setStatus = (status: PostStatus, msg: string, extra: Partial<Post> = {}) => save({ status, ...extra }, msg);
@@ -337,9 +343,13 @@ function Review({ post, onClose }: { post: Post; onClose: () => void }) {
               className="btn btn--danger btn--ghost"
               onClick={async () => {
                 if (!window.confirm('Supprimer définitivement cette publication et tous ses fichiers ?')) return;
-                await repo.deletePost(post.id);
-                toast('Supprimé définitivement.');
-                onClose();
+                try {
+                  await repo.deletePost(post.id);
+                  toast('Supprimé définitivement.');
+                  onClose();
+                } catch (e) {
+                  toast(e instanceof Error ? e.message : 'Suppression impossible.');
+                }
               }}
             >
               <Icon name="trash" size={16} /> Supprimer définitivement
@@ -393,7 +403,7 @@ function Categories() {
   useEffect(() => setList(categories), [categories]);
   const commit = async (next: Category[]) => {
     setList(next);
-    await repo.saveCategories(next);
+    await repo.saveCategories(next).catch((e) => toast(e instanceof Error ? e.message : 'Enregistrement impossible.'));
   };
   const move = (i: number, d: number) => {
     const j = i + d;
@@ -484,14 +494,30 @@ function SettingsPanel() {
           <input type="number" min={1} max={30} value={maxMin} onChange={(e) => setMaxMin(Number(e.target.value))} />
         </label>
       </div>
-      <button type="button" className="btn btn--sm" onClick={async () => (await repo.saveSettings({ founderName: founderName.trim() || 'Jérémy', maxAudioSeconds: Math.max(1, Math.min(30, maxMin)) * 60 }), toast('Paramètres enregistrés.'))}>
+      <button type="button" className="btn btn--sm" onClick={() =>
+          repo
+            .saveSettings({ founderName: founderName.trim() || 'Jérémy', maxAudioSeconds: Math.max(1, Math.min(30, maxMin)) * 60 })
+            .then(() => toast('Paramètres enregistrés.'))
+            .catch((e) => toast(e instanceof Error ? e.message : 'Enregistrement impossible.'))
+        }>
         Enregistrer
       </button>
 
+      {repo.isRemote && <LocalTransfer />}
+
       <h3 className="h3">Sauvegarde et exportation</h3>
-      <p className="muted small">L’export contient toutes les données locales, y compris les fichiers audio et images, dans un fichier JSON.</p>
+      <p className="muted small">
+        {repo.isRemote
+          ? 'L’export contient toutes les publications et contributions de la base partagée (données privées comprises), avec les fichiers audio et images, dans un fichier JSON. Gardez-le en lieu sûr.'
+          : 'L’export contient toutes les données locales, y compris les fichiers audio et images, dans un fichier JSON.'}
+      </p>
       <div className="row wrap">
-        <button type="button" className="btn btn--ghost btn--sm" onClick={async () => downloadBlob(await repo.exportAll(), `hlh-sauvegarde-${new Date().toISOString().slice(0, 10)}.json`)}>
+        <button type="button" className="btn btn--ghost btn--sm" onClick={() =>
+          repo
+            .exportAll()
+            .then((b) => downloadBlob(b, `hlh-sauvegarde-${new Date().toISOString().slice(0, 10)}.json`))
+            .catch((e) => toast(e instanceof Error ? e.message : 'Export impossible.'))
+        }>
           <Icon name="download" size={16} /> Exporter les données
         </button>
         <button type="button" className="btn btn--ghost btn--sm" onClick={() => importRef.current?.click()}>
@@ -505,7 +531,10 @@ function SettingsPanel() {
           onChange={async (e) => {
             const f = e.target.files?.[0];
             e.target.value = '';
-            if (!f || !window.confirm('Restaurer cette sauvegarde remplacera toutes les données actuelles de ce navigateur. Continuer ?')) return;
+            const question = repo.isRemote
+              ? 'Les publications de cette sauvegarde seront ajoutées à la base partagée (celles qui existent déjà seront mises à jour). Continuer ?'
+              : 'Restaurer cette sauvegarde remplacera toutes les données actuelles de ce navigateur. Continuer ?';
+            if (!f || !window.confirm(question)) return;
             try {
               const n = await repo.importAll(f);
               toast(`${n} publications restaurées.`);
@@ -522,9 +551,22 @@ function SettingsPanel() {
         <button type="button" className="btn btn--ghost btn--sm" disabled={!demoCount} onClick={async () => toast(`${await repo.removeDemoData()} exemple(s) supprimé(s).`)}>
           Supprimer les exemples fictifs
         </button>
-        <button type="button" className="btn btn--ghost btn--sm" disabled={demoCount > 0} onClick={async () => (await seedDemoData(), toast('Exemples fictifs recréés.'))}>
+        <button
+          type="button"
+          className="btn btn--ghost btn--sm"
+          disabled={demoCount > 0}
+          onClick={async () => {
+            try {
+              await seedDemoData();
+              toast('Exemples fictifs recréés.');
+            } catch (e) {
+              toast(e instanceof Error ? e.message : 'Impossible de recréer les exemples.');
+            }
+          }}
+        >
           Recréer les exemples
         </button>
+        {!repo.isRemote && (
         <button
           type="button"
           className="btn btn--danger btn--sm"
@@ -538,8 +580,116 @@ function SettingsPanel() {
         >
           Tout réinitialiser
         </button>
+        )}
       </div>
     </div>
+  );
+}
+
+/* ================================================================== */
+/* Transfert des données V0.1 de cet appareil vers la base partagée    */
+/* ================================================================== */
+
+function LocalTransfer() {
+  const toast = useToast();
+  const [list, setList] = useState<Post[]>([]);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    const load = () => repo.localOnlyPosts().then(setList).catch(() => setList([]));
+    load();
+    return repo.subscribe(load);
+  }, []);
+  if (!list.length) return null;
+  return (
+    <div className="notice" data-testid="local-transfer">
+      <p>
+        <strong>{list.length} publication(s) ou contribution(s)</strong> sont encore enregistrées uniquement sur cet appareil (version précédente du site) :{' '}
+        {list
+          .slice(0, 3)
+          .map((p) => `« ${p.title} »`)
+          .join(', ')}
+        {list.length > 3 ? '…' : ''}. Envoyez-les dans la base partagée pour qu’elles apparaissent sur tous les appareils.
+      </p>
+      <button
+        type="button"
+        className="btn btn--sm"
+        disabled={busy}
+        onClick={async () => {
+          setBusy(true);
+          try {
+            toast(`${await repo.migrateLocalToShared()} élément(s) envoyé(s) dans la base partagée.`);
+          } catch (e) {
+            toast(e instanceof Error ? e.message : 'Transfert impossible.');
+          } finally {
+            setBusy(false);
+          }
+        }}
+      >
+        <Icon name="upload" size={16} /> {busy ? 'Envoi en cours…' : 'Envoyer vers la base partagée'}
+      </button>
+    </div>
+  );
+}
+
+/* ================================================================== */
+/* Connexion (base partagée)                                           */
+/* ================================================================== */
+
+function Login({ auth }: { auth: repo.AuthState }) {
+  const [email, setEmail] = useState(auth.email ?? '');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  return (
+    <section className="page narrow" data-testid="admin-login">
+      <h1 className="page__title">Administration</h1>
+      {auth.email ? (
+        <>
+          <p className="alert" role="alert">
+            Vous êtes connecté avec <strong>{auth.email}</strong>, mais ce compte n’a pas les droits d’administration.
+          </p>
+          <button type="button" className="btn btn--ghost" onClick={() => repo.signOut()}>
+            Se déconnecter
+          </button>
+        </>
+      ) : (
+        <form
+          className="block"
+          onSubmit={async (e) => {
+            e.preventDefault();
+            setBusy(true);
+            setError('');
+            try {
+              const a = await repo.signIn(email, password);
+              if (!a.isAdmin) setError('Connexion réussie, mais ce compte n’a pas les droits d’administration.');
+            } catch (err) {
+              setError(err instanceof Error ? err.message : 'Connexion impossible.');
+            } finally {
+              setBusy(false);
+              setPassword('');
+            }
+          }}
+        >
+          <p className="muted">Espace réservé à l’administration du site. Connectez-vous avec le compte administrateur.</p>
+          <label className="field">
+            <span>Adresse e-mail</span>
+            <input type="email" autoComplete="username" required value={email} onChange={(e) => setEmail(e.target.value)} data-testid="login-email" />
+          </label>
+          <label className="field">
+            <span>Mot de passe</span>
+            <input type="password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} data-testid="login-password" />
+          </label>
+          {error && (
+            <p className="alert" role="alert">
+              {error}
+            </p>
+          )}
+          <button type="submit" className="btn" disabled={busy} data-testid="login-submit">
+            {busy ? 'Connexion…' : 'Se connecter'}
+          </button>
+        </form>
+      )}
+    </section>
   );
 }
 
@@ -548,6 +698,19 @@ function SettingsPanel() {
 /* ================================================================== */
 
 export function Admin({ route }: { route: Route }) {
+  const [auth, setAuth] = useState<repo.AuthState | null>(repo.isRemote ? null : { isAdmin: true });
+  useEffect(() => {
+    if (!repo.isRemote) return;
+    const check = () => repo.getAuth().then(setAuth);
+    check();
+    return repo.subscribe(check);
+  }, []);
+  if (!auth) return <section className="page center-text muted">Vérification de la connexion…</section>;
+  if (!auth.isAdmin) return <Login auth={auth} />;
+  return <AdminPanel route={route} auth={auth} />;
+}
+
+function AdminPanel({ route, auth }: { route: Route; auth: repo.AuthState }) {
   const { posts, categoryName } = useData();
   const toast = useToast();
   const tab = (route.segments[1] as Tab | undefined) ?? 'tableau';
@@ -556,10 +719,14 @@ export function Admin({ route }: { route: Route }) {
   const [storage, setStorage] = useState<{ usage?: number; quota?: number; persisted?: boolean }>({});
 
   useEffect(() => {
-    repo.listReports().then(setReports);
-    storageEstimate().then(setStorage);
+    repo.listReports().then(setReports).catch(() => undefined);
+    if (repo.isRemote) {
+      const seen = new Map<string, number>();
+      for (const p of posts) for (const m of [...p.images, ...(p.audio ? [p.audio] : []), ...(p.private.proofs ?? [])]) seen.set(m.id, m.size ?? 0);
+      setStorage({ usage: [...seen.values()].reduce((a, b) => a + b, 0), quota: 1024 ** 3 });
+    } else storageEstimate().then(setStorage);
   }, [posts]);
-  useEffect(() => repo.subscribe(() => repo.listReports().then(setReports)), []);
+  useEffect(() => repo.subscribe(() => repo.listReports().then(setReports).catch(() => undefined)), []);
 
   const pending = useMemo(() => posts.filter((p) => PENDING.includes(p.status)).sort((a, b) => (a.submittedAt ?? '').localeCompare(b.submittedAt ?? '')), [posts]);
   const others = useMemo(
@@ -586,13 +753,24 @@ export function Admin({ route }: { route: Route }) {
 
   return (
     <section className="page page--wide admin" data-testid="admin">
-      <div className="admin-warning" role="note">
-        <Icon name="shield" size={18} />
-        <p>
-          <strong>Administration locale de démonstration, non sécurisée.</strong> Aucun mot de passe ne la protège et elle ne gère que les données de ce navigateur. Elle sera placée
-          derrière une authentification avec rôles avant toute mise en ligne publique.
-        </p>
-      </div>
+      {repo.isRemote ? (
+        <div className="row wrap admin-session">
+          <p className="small muted">
+            <Icon name="shield" size={14} /> Connecté : <strong>{auth.email}</strong> · base partagée
+          </p>
+          <button type="button" className="btn btn--ghost btn--sm" onClick={() => repo.signOut()} data-testid="logout">
+            Se déconnecter
+          </button>
+        </div>
+      ) : (
+        <div className="admin-warning" role="note">
+          <Icon name="shield" size={18} />
+          <p>
+            <strong>Administration locale de démonstration, non sécurisée.</strong> Aucun mot de passe ne la protège et elle ne gère que les données de ce navigateur. Elle sera placée
+            derrière une authentification avec rôles avant toute mise en ligne publique.
+          </p>
+        </div>
+      )}
       <div className="admin__head">
         <h1 className="page__title">Administration</h1>
         <a className="btn btn--sm" href="#/temoigner?mode=fondateur">
@@ -638,7 +816,7 @@ export function Admin({ route }: { route: Route }) {
                 <div className="stat">
                   <span className="stat__n">{formatBytes(storage.usage)}</span>
                   <span className="stat__l">
-                    stockage utilisé{storage.quota ? ` sur ${formatBytes(storage.quota)}` : ''}
+                    {repo.isRemote ? 'fichiers en ligne' : 'stockage utilisé'}{storage.quota ? ` sur ${formatBytes(storage.quota)}` : ''}
                     {storage.persisted ? ' · persistant' : ''}
                   </span>
                 </div>

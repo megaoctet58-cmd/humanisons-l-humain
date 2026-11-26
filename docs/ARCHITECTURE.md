@@ -12,16 +12,32 @@
 - L'audio enregistré est conservé **tel quel** (webm/opus ou mp4 selon le navigateur) : pas de
   ré-encodage, la voix et l'intonation restent originales. Durée et onde sont calculées à l'enregistrement.
 
-## Brancher un vrai serveur (phase 4)
+## Base partagée (V0.2) — comment c'est construit
 
-1. Créer les tables (Supabase/PostgreSQL) d'après `src/models/types.ts`
-   (`posts`, `media`, `reports`, `categories`, `reactions`, `favorites`), en séparant
-   les champs `private` dans une table protégée (e-mail, justificatifs, notes de modération).
-2. Réécrire `src/services/repository.ts` avec les mêmes fonctions (listPosts, savePost, saveMedia…).
-   Les fichiers vont dans Supabase Storage (seau privé pour les contributions non publiées).
-3. Remplacer `DataProvider` par des requêtes paginées côté serveur pour le fil public.
-4. Authentification (Supabase Auth) + rôles `fondateur`, `moderateur`, `contributeur` ;
-   règles RLS : un visiteur ne lit que les publications `publie`.
-5. Transcription : implémenter `TranscriptionEngine` (`src/services/transcription.ts`) avec
-   Whisper auto-hébergé ou whisper.cpp en WebAssembly (gratuit, local au navigateur).
-6. Avant ouverture publique : anti-spam, limites de débit, CGU, confidentialité, mentions légales, RGPD.
+- **Supabase** (offre gratuite) : PostgreSQL + stockage de fichiers + connexion. Choisi parce qu'il
+  fournit les trois sans serveur à écrire, avec des règles d'accès dans la base (RLS) : le site reste
+  100 % statique sur GitHub Pages. Seule la clé publique (anon / publishable) est dans le code.
+- `src/config.ts` vide → mode local inchangé (V0.1). Rempli → `repository.ts` utilise `remote.ts`.
+- Tables (`supabase/schema.sql`) :
+  - `posts` : contenu public de chaque publication (`data` jsonb) + `status`, dates. Lecture publique
+    limitée aux statuts `publie` et `programme` échu.
+  - `post_private` : e-mail, justificatifs, notes de modération, message à l'auteur, retrait,
+    pseudonyme d'un auteur anonyme, empreinte du jeton du contributeur. **Admin uniquement.**
+  - `reports`, `app_kv` (catégories, paramètres), `admins` (qui administre).
+- Contributeurs sans compte : fonctions `submit_contribution`, `my_contributions`,
+  `request_withdrawal`, `report_post` (security definer, contrôles stricts). Le contributeur garde
+  un jeton secret dans son navigateur ; la base n'en garde que l'empreinte sha256.
+- Fichiers : seau privé `media`. Lecture publique seulement des images et des voix autorisées des
+  publications visibles. Envoi anonyme seulement des fichiers déclarés par une contribution en attente.
+- Restent sur l'appareil : brouillons, favoris, réactions, copie des contributions envoyées.
+- Rafraîchissement : relecture au retour sur l'onglet, en changeant de page (au plus toutes les 3 s)
+  et chaque minute.
+- Transfert des données V0.1 : Administration → Paramètres → « Envoyer vers la base partagée ».
+
+## Suite possible
+
+1. Comptes contributeurs (Supabase Auth, lien magique) et rôle `moderateur`.
+2. Pagination du fil côté serveur quand il dépassera quelques centaines de publications.
+3. Transcription : implémenter `TranscriptionEngine` (`src/services/transcription.ts`) avec
+   whisper.cpp en WebAssembly (gratuit, local au navigateur).
+4. Avant ouverture publique : anti-spam renforcé (captcha), CGU, confidentialité, mentions légales, RGPD.

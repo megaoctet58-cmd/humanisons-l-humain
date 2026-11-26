@@ -1,4 +1,4 @@
-/** Image stockée localement (IndexedDB). */
+/** Image stockée sur l'appareil ou dans la base partagée. */
 import { useEffect, useState } from 'react';
 import * as repo from '../services/repository';
 
