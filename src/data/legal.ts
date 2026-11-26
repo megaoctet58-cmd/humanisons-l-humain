@@ -4,17 +4,17 @@
  */
 export const LEGAL = {
   /** Particulier, association ou entreprise qui édite le site. */
-  editeur: '',
+  editeur: 'Jérémy Thiebaut, particulier',
   /** Nom complet du directeur ou de la directrice de la publication. */
-  directeurPublication: '',
+  directeurPublication: 'Jérémy Thiebaut',
   /** Adresse e-mail de contact (RGPD, signalements, mot de passe oublié). */
-  email: '',
+  email: 'jtnievre@live.fr',
   /** Adresse postale, ou vide si l'éditeur, particulier, use du droit à l'anonymat (LCEN art. 6 III-2). */
   adresse: '',
   /** SIREN / RNA si l'éditeur est une structure. */
   immatriculation: '',
   /** Région de la base Supabase choisie à la création du projet. */
-  regionDonnees: '',
+  regionDonnees: 'Paris, France',
   /** Âge minimum pour contribuer ou créer un compte. */
   ageMinimum: 15,
   /** Date de dernière mise à jour des textes. */
