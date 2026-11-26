@@ -23,6 +23,17 @@ export function Feed({ route }: { route: Route }) {
 
   return (
     <section className="page" aria-labelledby="feed-title">
+      {type === 'tout' && !categoryId && (
+        <div className="intro" data-testid="intro">
+          <p className="intro__text">
+            Vous avez vécu une situation où l'argent ou l'intérêt de quelques-uns a compté plus que l'humain, et vous ne comprenez toujours pas ? Ici, vous pouvez la raconter, la
+            dénoncer et découvrir que vous n'êtes pas seul.
+          </p>
+          <a className="btn btn--sm" href="#/temoigner">
+            Témoigner
+          </a>
+        </div>
+      )}
       <div className="section-head">
         <h1 id="feed-title" className="section-head__title">
           Le fil humain
