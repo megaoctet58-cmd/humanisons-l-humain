@@ -2,7 +2,7 @@
 
 ## V0.2.0 — 26 novembre 2026
 
-Base partagée (Supabase, offre gratuite), activée dès que `src/config.ts` est rempli.
+Base partagée (Supabase, offre gratuite), branchée le 26 novembre 2026 (projet tzflxdyngkrunueqrojl).
 Sans configuration, le site fonctionne exactement comme la V0.1.
 
 - Publications, contributions, voix, images, signalements, catégories et paramètres partagés

@@ -62,7 +62,7 @@ Automatiquement (vrai navigateur Chromium, micro simulé qui produit un vrai flu
 
 ```bash
 npm install -D playwright && npx playwright install chromium   # une seule fois
-npm run build && npx vite preview --port 4173 &                 # dans un autre terminal
+VITE_FORCE_LOCAL=1 npm run build && npx vite preview --port 4173 &   # mode local, dans un autre terminal
 npm run test:e2e
 ```
 

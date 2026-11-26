@@ -1,7 +1,7 @@
 /**
  * Connexion à la base partagée (Supabase).
  *
- * Tant que ces deux valeurs sont vides, le site fonctionne comme le prototype
+ * Si ces deux valeurs sont vides (ou avec VITE_FORCE_LOCAL=1), le site fonctionne comme le prototype
  * V0.1 : tout reste dans le navigateur de chaque appareil.
  *
  * Dès qu'elles sont remplies, publications, contributions et fichiers sont
@@ -12,8 +12,8 @@
  * d'accès (RLS) de supabase/schema.sql. Ne mettez JAMAIS ici la clé secrète
  * (« service_role » / « secret »).
  */
-export const SUPABASE_URL: string = import.meta.env.VITE_SUPABASE_URL ?? '';
-export const SUPABASE_ANON_KEY: string = import.meta.env.VITE_SUPABASE_ANON_KEY ?? '';
+export const SUPABASE_URL: string = import.meta.env.VITE_SUPABASE_URL ?? 'https://tzflxdyngkrunueqrojl.supabase.co';
+export const SUPABASE_ANON_KEY: string = import.meta.env.VITE_SUPABASE_ANON_KEY ?? 'sb_publishable_tmOLGHj3ud2qvbkiFGxLSw_tArnkPlE';
 
 /** true : base partagée ; false : stockage local du navigateur uniquement. */
 export const REMOTE = Boolean(SUPABASE_URL && SUPABASE_ANON_KEY) && import.meta.env.VITE_FORCE_LOCAL !== '1';
