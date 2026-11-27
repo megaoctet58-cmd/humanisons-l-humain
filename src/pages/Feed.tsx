@@ -26,8 +26,8 @@ export function Feed({ route }: { route: Route }) {
       {type === 'tout' && !categoryId && (
         <div className="intro" data-testid="intro">
           <p className="intro__text">
-            Vous avez vécu une situation où l'argent ou l'intérêt de quelques-uns a compté plus que l'humain, et vous ne comprenez toujours pas ? Ici, vous pouvez la raconter, la
-            dénoncer et découvrir que vous n'êtes pas seul.
+            Vous avez vécu une situation où l'argent ou l'intérêt de quelques-uns a compté plus que l'humain, et vous ne comprenez toujours pas ? L'injustice devient banale,
+            ici, vous pouvez la raconter, la dénoncer et découvrir que vous n'êtes pas seul.
           </p>
           <a className="btn btn--sm" href="#/temoigner">
             Témoigner
