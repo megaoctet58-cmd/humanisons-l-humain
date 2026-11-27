@@ -1222,6 +1222,22 @@ fieldset.block > legend + * {
 .segmented__opt:focus-within {
   outline: 2px solid var(--accent);
 }
+/* Petit texte sous le choix Écrire / Ma voix / Les deux */
+.voice-hint {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  margin: 10px 4px 0;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  font-style: italic;
+  color: var(--text-2);
+}
+.voice-hint svg {
+  flex: none;
+  margin-top: 3px;
+  color: var(--accent);
+}
 /* Texte de présentation en haut du fil */
 .intro {
   text-align: center;

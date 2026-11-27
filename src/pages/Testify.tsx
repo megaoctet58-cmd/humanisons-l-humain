@@ -334,6 +334,13 @@ export function Testify({ route }: { route: Route }) {
               </label>
             ))}
           </div>
+          <p className="voice-hint" data-testid="voice-hint">
+            <Icon name="mic" size={14} />
+            <span>
+              Votre voix dit ce que les mots taisent. Une hésitation, une colère contenue, un silence : l'intonation transmet ce que vous avez ressenti mieux qu'un texte.
+              N'ayez pas peur de parler comme vous êtes, c'est justement ce qui rend votre témoignage humain.
+            </span>
+          </p>
         </fieldset>
 
         <fieldset className="block">
