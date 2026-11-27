@@ -15,6 +15,7 @@ import { Modal } from '../components/Modal';
 import { Icon } from '../components/Icon';
 import { useToast } from '../components/Toast';
 import { navigate, type Route } from '../lib/router';
+import { DEPARTMENTS, OTHER_PLACES } from '../data/departments';
 import { cx, formatBytes, isSafeUrl, uid } from '../lib/util';
 
 type Mode = 'ecrire' | 'voix' | 'les_deux';
@@ -49,6 +50,7 @@ export function Testify({ route }: { route: Route }) {
   const [authorName, setAuthorName] = useState(() => (founder ? settings.founderName : getPseudonym()));
   const [anonymous, setAnonymous] = useState(false);
   const [email, setEmail] = useState('');
+  const [department, setDepartment] = useState('');
   const [audio, setAudio] = useState<AudioDraft | null>(null);
   const [audioRef, setAudioRef] = useState<MediaRef | null>(null); // audio déjà stocké (brouillon)
   const [publishVoice, setPublishVoice] = useState(true);
@@ -91,6 +93,7 @@ export function Testify({ route }: { route: Route }) {
     setAuthorName(existing.authorName ?? '');
     setAnonymous(existing.anonymous);
     setEmail(existing.private.email ?? '');
+    setDepartment(existing.private.department ?? '');
     setTranscription(existing.transcription ?? '');
     setAutoTranscribed(existing.transcriptionSource === 'automatique');
     setSources(existing.sources);
@@ -200,7 +203,7 @@ export function Testify({ route }: { route: Route }) {
       submittedAt: status === 'en_attente' ? now : existing?.submittedAt,
       publishedAt: status === 'publie' ? now : existing?.publishedAt,
       mine: !founder,
-      private: { ...(existing?.private ?? {}), email: email.trim() || undefined, proofs: proofRefs },
+      private: { ...(existing?.private ?? {}), email: email.trim() || undefined, department: department || undefined, proofs: proofRefs },
     };
     if (!founder && !anonymous && authorName.trim()) setPseudonym(authorName);
     return repo.savePost(post);
@@ -540,6 +543,31 @@ export function Testify({ route }: { route: Route }) {
               </label>
             </>
           )}
+          <label className="field">
+            <span>
+              Votre département <em className="muted">(facultatif)</em>
+            </span>
+            <select value={department} onChange={(e) => setDepartment(e.target.value)} data-testid="field-department">
+              <option value="">Je préfère ne pas le dire</option>
+              <optgroup label="Départements">
+                {DEPARTMENTS.map((d) => (
+                  <option key={d.code} value={d.code}>
+                    {d.code} · {d.name}
+                  </option>
+                ))}
+              </optgroup>
+              <optgroup label="Ailleurs">
+                {OTHER_PLACES.map((d) => (
+                  <option key={d.code} value={d.code}>
+                    {d.name}
+                  </option>
+                ))}
+              </optgroup>
+            </select>
+            <small className="muted">
+              Il n’apparaît jamais sur votre publication. Il sert seulement à compter les témoignages sur la <a href="#/explorer?vue=carte">carte</a>.
+            </small>
+          </label>
           <details className="details">
             <summary>Joindre des justificatifs privés (facultatif)</summary>
             <p className="muted small">Documents visibles uniquement par la modération (ex. : courrier reçu). Ils ne sont jamais publiés.</p>

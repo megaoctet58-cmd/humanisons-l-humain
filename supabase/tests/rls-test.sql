@@ -186,4 +186,38 @@ do $$ begin
   perform public.delete_my_account(); raise exception 'ÉCHEC : admin supprimé';
 exception when raise_exception then if sqlerrm like 'ÉCHEC%' then raise; end if; raise notice 'ok : le compte admin ne se supprime pas par erreur'; end $$;
 reset role; reset request.jwt.claim.sub;
+
+-- ---------------------------------------------------------------------
+-- Carte par département
+-- ---------------------------------------------------------------------
+reset role; reset request.jwt.claim.sub;
+set role anon;
+select public.submit_contribution('p_dep_1', '{"title":"Nièvre 1"}', '{"department":"58"}', 'jeton-carte-jeton-carte-000000001');
+select public.submit_contribution('p_dep_2', '{"title":"Nièvre 2"}', '{"department":"58"}', 'jeton-carte-jeton-carte-000000002');
+select public.submit_contribution('p_dep_3', '{"title":"Nièvre 3"}', '{"department":"58"}', 'jeton-carte-jeton-carte-000000003');
+select public.submit_contribution('p_dep_4', '{"title":"Corse"}', '{"department":"2A"}', 'jeton-carte-jeton-carte-000000004');
+select public.submit_contribution('p_dep_5', '{"title":"Faux"}', '{"department":"<script>"}', 'jeton-carte-jeton-carte-000000005');
+select public.submit_contribution('p_dep_6', '{"title":"Nièvre attente"}', '{"department":"58"}', 'jeton-carte-jeton-carte-000000006');
+reset role;
+select pg_temp.check((select data->>'department' from public.post_private where post_id = 'p_dep_1') = '58', 'département enregistré dans les données privées');
+select pg_temp.check((select data ? 'department' from public.posts where id = 'p_dep_1') = false, 'département absent des données publiques');
+select pg_temp.check((select data->>'department' from public.post_private where post_id = 'p_dep_5') is null, 'département invalide ignoré');
+update public.posts set status = 'publie', published_at = now() where id in ('p_dep_1', 'p_dep_2', 'p_dep_4', 'p_dep_5');
+set role anon;
+select pg_temp.check((select count(*) from public.department_map() where department = '58') = 1 and (select n is null and ids is null from public.department_map() where department = '58'), 'carte : 2 publiés → « moins de 3 », sans liste');
+reset role;
+update public.posts set status = 'publie', published_at = now() where id = 'p_dep_3';
+set role anon;
+select pg_temp.check((select n = 3 and ids = array['p_dep_1','p_dep_2','p_dep_3'] from public.department_map() where department = '58'), 'carte : 3 publiés → nombre et liste (contribution en attente non comptée)');
+select pg_temp.check((select n is null from public.department_map() where department = '2A'), 'carte : 1 publié en Corse-du-Sud → « moins de 3 »');
+do $$ begin
+  perform * from public.post_private; raise exception 'ÉCHEC : anon lit post_private';
+exception when insufficient_privilege then raise notice 'ok : la carte ne donne pas accès aux données privées'; end $$;
+reset role;
+-- Correction par le contributeur : le département suit la nouvelle version.
+update public.posts set status = 'en_attente' where id = 'p_dep_6';
+set role anon;
+select public.submit_contribution('p_dep_6', '{"title":"Nièvre attente"}', '{}', 'jeton-carte-jeton-carte-000000006');
+reset role;
+select pg_temp.check((select data->>'department' from public.post_private where post_id = 'p_dep_6') is null, 'département retiré quand le contributeur le retire');
 \echo TOUS LES TESTS RLS SONT PASSÉS

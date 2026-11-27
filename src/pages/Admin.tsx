@@ -33,6 +33,7 @@ import { Icon } from '../components/Icon';
 import { useToast } from '../components/Toast';
 import { cx, downloadBlob, formatBytes, formatDateTime, isSafeUrl, uid } from '../lib/util';
 import { navigate, type Route } from '../lib/router';
+import { DEPARTMENTS, OTHER_PLACES, departmentLabel } from '../data/departments';
 
 type Tab = 'tableau' | 'contributions' | 'publications' | 'signalements' | 'categories' | 'parametres';
 const PENDING: PostStatus[] = ['en_attente', 'en_verification', 'infos_demandees'];
@@ -230,6 +231,21 @@ function Review({ post, onClose }: { post: Post; onClose: () => void }) {
               <Icon name="shield" size={16} /> Informations privées
             </p>
             <p className="small">E-mail : {post.private.email ? <a href={`mailto:${post.private.email}`}>{post.private.email}</a> : <span className="muted">non fourni</span>}</p>
+            <label className="field small">
+              <span>Département (sert seulement à la carte, jamais affiché)</span>
+              <select
+                value={post.private.department ?? ''}
+                onChange={(e) => save({ private: { ...post.private, department: e.target.value || undefined } }, 'Département mis à jour.')}
+                data-testid="admin-department"
+              >
+                <option value="">Non indiqué</option>
+                {[...DEPARTMENTS, ...OTHER_PLACES].map((d) => (
+                  <option key={d.code} value={d.code}>
+                    {departmentLabel(d.code)}
+                  </option>
+                ))}
+              </select>
+            </label>
             <p className="small">
               Consentement publication : {post.consent.publication ? 'oui' : 'non'}
               {post.audio && <> · voix identifiable comprise : {post.consent.voiceIdentifiable ? 'oui' : 'non'}</>}

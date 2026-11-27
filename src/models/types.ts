@@ -93,6 +93,11 @@ export interface PrivateInfo {
   /** Pseudonyme saisi par un auteur qui a choisi l'anonymat (visible de la modération seulement). */
   hiddenAuthorName?: string;
   /**
+   * Département déclaré par l'auteur (facultatif, code INSEE, « COM » ou « HF »).
+   * Jamais affiché sur la publication : il ne sert qu'à la carte, en nombres.
+   */
+  department?: string;
+  /**
    * Jeton secret gardé UNIQUEMENT sur l'appareil du contributeur : il lui permet
    * de suivre sa contribution et d'en demander le retrait. La base n'en conserve
    * qu'une empreinte (sha256), jamais le jeton lui-même.
