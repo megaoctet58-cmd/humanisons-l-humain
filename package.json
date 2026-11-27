@@ -1,6 +1,6 @@
 {
   "name": "humanisons-l-humain",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
   "description": "HUMANISONS L'HUMAIN (HLH) — Un réseau humain plutôt qu'un réseau social. Prototype V0.2 : base partagée Supabase (facultative).",
   "type": "module",
@@ -12,7 +12,8 @@
     "typecheck": "tsc --noEmit",
     "test:e2e": "node tests/parcours.e2e.mjs",
     "test:partage": "node tests/partage.e2e.mjs",
-    "test:comptes": "node tests/comptes.e2e.mjs"
+    "test:comptes": "node tests/comptes.e2e.mjs",
+    "test:carte": "node tests/carte.e2e.mjs"
   },
   "dependencies": {
     "@huggingface/transformers": "4.3.1",

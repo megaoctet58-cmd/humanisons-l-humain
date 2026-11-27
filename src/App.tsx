@@ -36,7 +36,7 @@ function Page({ route }: { route: Route }) {
     case undefined:
       return <Feed route={route} />;
     case 'explorer':
-      return <Explore />;
+      return <Explore route={route} />;
     case 'temoigner':
       return <Testify key={route.query.toString()} route={route} />;
     case 'voix':

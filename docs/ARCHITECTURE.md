@@ -46,6 +46,14 @@
   Le moteur WebAssembly est servi par le site lui-même ; le modèle vient de huggingface.co.
 - Pages légales : `pages/Legal.tsx`, données d'identité dans `data/legal.ts`.
 
+## V0.4 — carte par département
+
+- Le département (facultatif) est dans `post_private.data.department` : jamais dans les données publiques.
+- `department_map()` (security definer) renvoie, pour les publications visibles, le nombre et la liste
+  des identifiants par département, ou `null` au-dessous de 3. `submit_contribution` n'accepte que les
+  codes valides (`hlh_valid_department`).
+- `components/DepartmentMap.tsx` dessine la carte (SVG, `data/franceMap.ts` généré depuis IGN Admin Express).
+
 ## Suite possible
 
 1. Service d'e-mails gratuit (Brevo…) pour confirmation d'inscription et mot de passe oublié ; rôle `moderateur`.

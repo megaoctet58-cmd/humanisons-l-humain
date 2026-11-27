@@ -1,5 +1,19 @@
 # Journal des modifications
 
+## V0.4.0 — 27 novembre 2026
+
+- **Carte des témoignages par département** : dans « Témoigner », champ facultatif « Votre département »
+  (01 à 95, 2A, 2B, outre-mer, autre collectivité d'outre-mer, hors de France). Dans « Explorer », onglet
+  « La carte » : chaque département est coloré selon le nombre de témoignages publiés ; un toucher (ou la
+  liste) affiche le nombre et les témoignages du département.
+- Discrétion : le département est rangé avec les données privées, n'apparaît jamais sur un témoignage,
+  et au-dessous de 3 témoignages la base ne donne que « moins de 3 », sans la liste (fonction
+  `department_map`). L'administration peut corriger le département d'une contribution.
+- Fond de carte : IGN Admin Express (Licence Ouverte), généré par `scripts/build-map.py`.
+- Mise à jour de la base : relancer `supabase/schema.sql` (ne supprime rien). Avant cela, le site
+  fonctionne et la carte indique qu'elle se met en place.
+- Tests : `tests/carte.e2e.mjs`, 8 vérifications de plus dans `supabase/tests/rls-test.sql`.
+
 ## V0.3.0 — 26 novembre 2026
 
 - **Comptes contributeurs facultatifs** (e-mail + mot de passe) : contributions, brouillons (avec leurs

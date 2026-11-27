@@ -22,4 +22,5 @@ PGDATABASE=hlh_e2e node supabase/tests/fake-supabase.mjs &
 VITE_SUPABASE_URL=http://localhost:54321 VITE_SUPABASE_ANON_KEY=cle-anon-de-test npx vite build --outDir dist-remote
 npx vite preview --outDir dist-remote --port 4174 &
 npm run test:partage
+PGDATABASE=hlh_e2e npm run test:carte
 ```

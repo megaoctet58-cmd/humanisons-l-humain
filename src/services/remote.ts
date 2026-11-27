@@ -133,7 +133,7 @@ export async function myContributions(items: { id: string; token: string }[], si
 export async function submitContribution(post: Post, token: string): Promise<void> {
   const sb = await client();
   const { data, priv } = split(post);
-  const { error } = await sb.rpc('submit_contribution', { p_id: post.id, p_data: data, p_private: { email: priv.email, proofs: priv.proofs ?? [] }, p_token: token });
+  const { error } = await sb.rpc('submit_contribution', { p_id: post.id, p_data: data, p_private: { email: priv.email, proofs: priv.proofs ?? [], department: priv.department }, p_token: token });
   if (error) fail('Envoi de la contribution', error);
 }
 
@@ -147,6 +147,20 @@ export async function reportPost(postId: string, reason: string, details?: strin
   const sb = await client();
   const { error } = await sb.rpc('report_post', { p_post_id: postId, p_reason: reason, p_details: details ?? '' });
   if (error) fail('Signalement', error);
+}
+
+/** Nombre de publications publiques par département (la base masque les nombres inférieurs à 3). */
+export interface DepartmentRow {
+  department: string;
+  n: number | null;
+  ids: string[] | null;
+}
+
+export async function departmentMap(): Promise<DepartmentRow[]> {
+  const sb = await client();
+  const { data, error } = await sb.rpc('department_map');
+  if (error) fail('Lecture de la carte', error);
+  return (data ?? []) as DepartmentRow[];
 }
 
 /* ------------------------------------------------------------------ */

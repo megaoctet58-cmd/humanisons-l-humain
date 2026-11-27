@@ -16,7 +16,8 @@
 import { REMOTE } from '../config';
 import * as local from './local';
 import * as remote from './remote';
-import type { Category, MediaRef, Post, ReactionId, Report, Settings } from '../models/types';
+import { isPublic, type Category, type MediaRef, type Post, type ReactionId, type Report, type Settings } from '../models/types';
+import { MAP_MIN_COUNT } from '../data/departments';
 import { getPseudonym, setPseudonym } from './preferences';
 import { DEFAULT_CATEGORIES } from '../data/categories';
 
@@ -199,6 +200,40 @@ export async function listPosts(): Promise<Post[]> {
   const all = [...map.values()];
   lastPosts = map;
   return all;
+}
+
+/* ------------------------------------------------------------------ */
+/* Carte des départements                                              */
+/* ------------------------------------------------------------------ */
+
+export interface DepartmentCount {
+  code: string;
+  /** null : moins de 3 publications (nombre exact masqué). */
+  count: number | null;
+  /** Publications de ce département (seulement à partir de 3). */
+  ids: string[];
+}
+
+/**
+ * Publications publiques comptées par département. Renvoie null si la base
+ * partagée ne sait pas encore le faire (mise à jour du schéma pas encore lancée).
+ */
+export async function departmentMap(): Promise<DepartmentCount[] | null> {
+  if (REMOTE) {
+    try {
+      const rows = await remote.departmentMap();
+      return rows.map((r) => ({ code: r.department, count: r.n ?? null, ids: r.ids ?? [] }));
+    } catch {
+      return null;
+    }
+  }
+  const byDep = new Map<string, string[]>();
+  for (const p of await local.listPosts()) {
+    const d = p.private.department;
+    if (!d || !isPublic(p)) continue;
+    byDep.set(d, [...(byDep.get(d) ?? []), p.id]);
+  }
+  return [...byDep].map(([code, ids]) => (ids.length >= MAP_MIN_COUNT ? { code, count: ids.length, ids } : { code, count: null, ids: [] }));
 }
 
 export async function getPost(id: string): Promise<Post | undefined> {

@@ -123,6 +123,17 @@ as $$
   select encode(sha256(convert_to(coalesce(p_token, ''), 'UTF8')), 'hex');
 $$;
 
+-- Département déclaré : code INSEE (01 à 95, 2A, 2B, 971 à 976), « COM » (autre collectivité
+-- d'outre-mer) ou « HF » (hors de France).
+create or replace function public.hlh_valid_department(p_code text)
+returns boolean
+language sql
+immutable
+set search_path = ''
+as $$
+  select coalesce(p_code ~ '^(0[1-9]|1[0-9]|2[1-9]|[3-8][0-9]|9[0-5]|2A|2B|97[12346]|COM|HF)$', false);
+$$;
+
 -- Un fichier est public s'il est une image d'une publication publique, ou la voix
 -- d'une publication publique dont l'auteur a autorisé la diffusion. Jamais un justificatif.
 create or replace function public.media_is_public(p_media text)
@@ -249,8 +260,11 @@ begin
   v_verif := case when p_data ->> 'verification' = 'a_documenter' then 'a_documenter' else 'non_verifie' end;
   v_data := (p_data - 'id' - 'status' - 'private' - 'mine' - 'publishedAt' - 'scheduledAt' - 'byFounder' - 'demo')
             || jsonb_build_object('byFounder', false, 'demo', false, 'verification', v_verif);
-  -- Seuls l'e-mail et les justificatifs viennent du contributeur.
-  v_priv := jsonb_strip_nulls(jsonb_build_object('email', left(p_private ->> 'email', 320), 'proofs', p_private -> 'proofs'));
+  -- Seuls l'e-mail, les justificatifs et le département (facultatif) viennent du contributeur.
+  v_priv := jsonb_strip_nulls(jsonb_build_object(
+    'email', left(p_private ->> 'email', 320),
+    'proofs', p_private -> 'proofs',
+    'department', case when public.hlh_valid_department(p_private ->> 'department') then p_private ->> 'department' end));
   v_hash := public.hlh_hash(p_token);
 
   select * into v_existing from public.posts where id = p_id;
@@ -271,7 +285,7 @@ begin
   end if;
   update public.posts set data = v_data, status = 'en_attente', updated_at = now() where id = p_id;
   -- Les notes et le message de la modération sont conservés.
-  update public.post_private set data = (data - 'email' - 'proofs') || v_priv where post_id = p_id;
+  update public.post_private set data = (data - 'email' - 'proofs' - 'department') || v_priv where post_id = p_id;
   return 'en_attente';
 end;
 $$;
@@ -367,6 +381,30 @@ begin
 end;
 $$;
 
+-- Carte : nombre de publications PUBLIQUES par département. Le département de chaque
+-- publication reste privé : au-dessous de 3 publications, ni le nombre exact ni la liste
+-- ne sont donnés (seulement « moins de 3 »), pour que personne ne puisse être reconnu.
+drop function if exists public.department_map();
+create function public.department_map()
+returns table (department text, n integer, ids text[])
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select s.dep,
+         case when count(*) >= 3 then count(*)::integer end,
+         case when count(*) >= 3 then array_agg(s.id order by s.id) end
+  from (
+    select pp.data ->> 'department' as dep, p.id
+    from public.posts p
+    join public.post_private pp on pp.post_id = p.id
+    where public.hlh_is_public(p.status, p.scheduled_at)
+      and public.hlh_valid_department(pp.data ->> 'department')
+  ) s
+  group by s.dep;
+$$;
+
 -- Signaler une publication publique.
 create or replace function public.report_post(p_post_id text, p_reason text, p_details text)
 returns void
@@ -442,7 +480,8 @@ grant execute on function public.is_admin(), public.hlh_is_public(text, timestam
   public.media_is_public(text), public.media_upload_allowed(text),
   public.submit_contribution(text, jsonb, jsonb, text), public.my_contributions(jsonb),
   public.request_withdrawal(text, text, text), public.report_post(text, text, text),
-  public.media_in_my_drafts(text), public.media_in_my_posts(text)
+  public.media_in_my_drafts(text), public.media_in_my_posts(text),
+  public.hlh_valid_department(text), public.department_map()
   to anon, authenticated;
 grant execute on function public.claim_contributions(jsonb), public.delete_my_account() to authenticated;
 revoke execute on function public.claim_contributions(jsonb), public.delete_my_account() from public, anon;
